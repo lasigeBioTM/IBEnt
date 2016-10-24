@@ -258,9 +258,9 @@ class SimpleTaggerModel(Model):
                 if sentence.sid in corpus.documents[did].invalid_sids:
                     logging.debug("Invalid sentence: {} - {}".format(sentence.sid, sentence.text))
                     continue
-                if sentence.sid in corpus.documents[did].title_sids:
-                    logging.debug("Title sentence: {} - {}".format(sentence.sid, sentence.text))
-                    continue
+                #if sentence.sid in corpus.documents[did].title_sids:
+                #    logging.debug("Title sentence: {} - {}".format(sentence.sid, sentence.text))
+                #    continue
                 if mode == "train" and "goldstandard" not in sentence.entities.elist:
                     # logging.debug("Skipped sentence without entities: {}".format(sentence.sid))
                     continue

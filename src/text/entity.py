@@ -251,8 +251,8 @@ class Entities(object):
                         extra_info.append('recognized_by:"' + "+".join(e.recognized_by) + '"')
                         spans.append((e.dstart, e.dend, e.text, extra_info))
                         # logging.info("added {}".format(e.text))
-                    else:
-                        logging.debug("did not add {}".format(e.text))
+                    #else:
+                    #    logging.debug("did not add {}".format(e.text))
         return spans
 
     def get_entity(self, eid, source="goldstandard"):

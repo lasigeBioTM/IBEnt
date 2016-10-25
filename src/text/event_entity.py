@@ -36,7 +36,7 @@ class EventEntity(Entity):
                     logging.debug("ignored stopword %s" % self.text)
                     stop = True
             if stop:
-                return False
+                return []
 
         if "paren" in rules:
             if (self.text[-1] == ")" and "(" not in self.text) or (self.text[-1] == "]" and "[" not in self.text) or \
@@ -54,12 +54,12 @@ class EventEntity(Entity):
 
         if "hyphen" in rules and "-" in self.text and all([len(t) > 3 for t in self.text.split("-")]):
             logging.debug("ignored hyphen %s" % self.text)
-            return False
+            return []
 
         #if all filters are 0, do not even check
         if "ssm" in ths and ths["ssm"] != 0 and self.ssm_score < ths["ssm"] and self.text.lower() not in chem_words:
             #logging.debug("filtered %s => %s" % (self.text,  str(self.ssm_score)))
-            return False
+            return []
 
         if "alpha" in rules:
             alpha = False
@@ -69,9 +69,9 @@ class EventEntity(Entity):
                     break
             if not alpha:
                 logging.debug("ignored no alpha %s" % self.text)
-                return False
+                return []
 
         if "dash" in rules and (self.text.startswith("-") or self.text.endswith("-")):
             logging.debug("excluded for -: {}".format(self.text))
             return False
-        return True
+        return [self]

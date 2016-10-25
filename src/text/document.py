@@ -258,7 +258,9 @@ class Document(object):
                 # print "found it!"
                 return s
         for s in self.sentences:
-            logging.debug("{} {} {} {} {}".format(s.tokens[0].dstart <= start, s.tokens[-1].dend >= end,
+            logging.debug("sentence not found: {}-{}".format(start, end))
+            if s.tokens:
+                logging.debug("{} {} {} {} {}".format(s.tokens[0].dstart <= start, s.tokens[-1].dend >= end,
                                                 s.tokens[0].dstart, s.tokens[-1].dend, s.text))
         return None
 

@@ -4,15 +4,32 @@ pubmed_test_base = "corpora/pubmed-test/"
 transmir_base = "corpora/transmir/"
 
 paths = {}
-for i in range(1,11):
-    paths["mirna_ds{}".format(i)] = {'corpus': "corpora/mirna-ds/abstracts_11k.txt_{}.pickle".format(i),
-                                    'format': "mirna",
-                                    'annotations': ""}
-    paths["mirna_ds_annotated{}".format(i)] = {'corpus': "data/mirna_ds_annotated_{}.pickle".format(i),
-                                               'format': "mirna",
-                                               'annotations': ""
-                                              }
+
 paths.update({
+    'coloncancer_train':{
+        'text': "corpora/thymedata-1.1.0/text/Train/",
+        'annotations': "corpora/thymedata-1.1.0/coloncancer/Train/",
+        'format': "tempeval",
+        'corpus': "data/coloncancer_train.pickle"
+    },
+    'coloncancer_sample':{
+        'text': "corpora/thymedata-1.1.0/text/sample/",
+        'annotations': "corpora/thymedata-1.1.0/coloncancer/sample/",
+        'format': "tempeval",
+        'corpus': "data/coloncancer_sample.pickle"
+    },
+    'coloncancer_dev':{
+            'text': "corpora/thymedata-1.1.0/text/Dev/",
+            'annotations': "corpora/thymedata-1.1.0/coloncancer/Dev/",
+            'format': "tempeval",
+            'corpus': "data/coloncancer_dev.pickle"
+        },
+    'coloncancer_test': {
+        'text': "corpora/thymedata-1.1.0/text/test/",
+        'annotations': "corpora/thymedata-1.1.0/coloncancer/test/",
+        'format': "tempeval",
+        'corpus': "data/coloncancer_test.pickle"
+    },
     'mirna_cf': {
         'corpus': "corpora/cf_corpus/abstracts.txt.pickle",
         'format': "mirna",

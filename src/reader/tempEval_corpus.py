@@ -5,6 +5,8 @@ import time
 import sys
 from operator import itemgetter
 import pprint
+from xml.dom import minidom
+
 from nltk.stem.porter import *
 import re
 from collections import Counter
@@ -69,7 +71,7 @@ class TempEvalCorpus(Corpus):
             self.documents[did].invalid_sids = invalid_sids
             logging.debug("invalid sentences: {}".format(invalid_sids))
 
-    def load_annotations(self, ann_dir):
+    def load_annotations(self, ann_dir, entity_type, relation_type):
         self.stemmer = PorterStemmer()
         self.get_invalid_sentences()
         logging.info("Cleaning previous annotations...")
@@ -307,9 +309,9 @@ def write_tempeval_results(results, models, ths, rules):
                             n=n+1
                             head = add_entity_to_doc(head, v, n)
 
-        for p in results.document_pairs[did].pairs:
-            if p.recognized_by.get("svmtk") == 1 or p.recognized_by.get("jsre") == 1 or p.recognized_by.get("rules") == 1:
-                head = add_relation_to_doc(head, p)
+        #for p in results.document_pairs[did].pairs:
+        #    if p.recognized_by.get("svmtk") == 1 or p.recognized_by.get("jsre") == 1 or p.recognized_by.get("rules") == 1:
+        #        head = add_relation_to_doc(head, p)
 
         tree = ET.ElementTree(root)
         if not os.path.exists(results.path + "/" + did + "/"):
@@ -356,14 +358,23 @@ def add_entity_to_doc(doc_element, entity, n):
     span = ET.SubElement(entityname, "span")
     span.text = str(entity.dstart)+","+str(entity.dend)
     type = ET.SubElement(entityname, "type")
-    type.texts = "EVENT"
     propertiesname = ET.SubElement(entityname, "properties")
-    classs = ET.SubElement(propertiesname, "Class")
-    value = ET.SubElement(propertiesname, "Value")
+    if entity.type == "time":
+        type.text = "TIMEX3"
+        timeclass = ET.SubElement(propertiesname, "Class")
+        timeclass.text = entity.subtype
+    else:
+        type.text = "EVENT"
+        subtype = ET.SubElement(propertiesname, "Type")
+        subtype.text = entity.subtype
+
+
+    #classs = ET.SubElement(propertiesname, "Class")
+    #value = ET.SubElement(propertiesname, "Value")
     ####
-    propertiesname = ET.SubElement(entityname, "properties") #XML
-    classs = ET.SubElement(propertiesname, "Class") # XML
-    classs.text = "asdasd"#entity.tag
+    #propertiesname = ET.SubElement(entityname, "properties") #XML
+    #classs = ET.SubElement(propertiesname, "Class") # XML
+    #classs.text = "asdasd"#entity.tag
     ##
     return doc_element
 
@@ -396,7 +407,7 @@ def get_thymedata_gold_ann_set(gold_path, etype, text_path, doctype):
     traindirs = os.listdir(gold_path) # list of directories corresponding to each document
     trainfiles = []
     for d in traindirs:
-        if doctype != "all" and doctype not in d:
+        if doctype != "tempeval" and doctype not in d:
             continue
         fname = gold_path + "/" + d + "/" + d + ".Temporal-Relation.gold.completed.xml"
         fname2 = gold_path + "/" + d + "/" + d + ".Temporal-Entity.gold.completed.xml"
@@ -412,6 +423,7 @@ def get_thymedata_gold_ann_set(gold_path, etype, text_path, doctype):
     for current, f in enumerate(trainfiles):
         # logging.debug('%s:%s/%s', f, current + 1, total)
         with open(f, 'r') as xml:
+            #logging.debug("opening {}".format(f))
             root = ET.fromstring(xml.read())
             did = traindirs[current]
             doc_to_id_to_span[did] = {}
@@ -427,8 +439,9 @@ def get_thymedata_gold_ann_set(gold_path, etype, text_path, doctype):
                 span = span.split(",")
                 start = int(span[0])
                 end = int(span[1])
-                entity_type = entity.find("type").text
+                entity_type = entity.find("type").text.lower()
                 doc_to_id_to_span[did][eid] = (start, end)
+                # logging.debug(entity_type)
                 if etype != "all" and entity_type != etype:
                     continue
                 else:
@@ -441,5 +454,5 @@ def get_thymedata_gold_ann_set(gold_path, etype, text_path, doctype):
                     if eid1 not in doc_to_id_to_span or eid2 not in doc_to_id_to_span:
                         continue
                     relation_gold_set.add((did, doc_to_id_to_span[did][eid1], doc_to_id_to_span[did][eid2]))
-
+    print "entities from gold standard:", len(gold_set)
     return gold_set, relation_gold_set

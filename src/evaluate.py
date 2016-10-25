@@ -28,7 +28,7 @@ from reader.jnlpba_corpus import get_jnlpba_gold_ann_set
 from reader.mirna_corpus import get_ddi_mirna_gold_ann_set
 from reader.mirtext_corpus import get_mirtex_gold_ann_set
 from reader.seedev_corpus import get_seedev_gold_ann_set
-from reader.tempEval_corpus import get_thymedata_gold_ann_set
+from reader.tempEval_corpus import get_thymedata_gold_ann_set, write_tempeval_results, run_anafora_evaluation
 
 if config.use_chebi:
     from postprocessing import chebi_resolution
@@ -258,6 +258,13 @@ def get_relations_results(results, model, gold_pairs, ths, rules, compare_text=T
     print "Fmeasure: {:.3f}".format(fmeasure)
     return precision, recall
 
+def run_anafora(results, models, annotations_path, text_path, ths, rules):
+    if not os.path.exists(results.path + "/files/"):
+        os.makedirs(results.path + "/files/")
+    write_tempeval_results(results, models, ths, rules)
+    r = run_anafora_evaluation(annotations_path, results.path, doctype="all")
+    print r
+
 def get_results(results, models, gold_offsets, ths, rules, compare_text=True):
     """
     Write a report file with basic stats
@@ -440,7 +447,9 @@ def main():
                     get_list_results(result, options.models, goldset[1], ths, options.rules, mode="re")
                 else:
                     get_list_results(result, options.models, goldset[0], ths, options.rules)
-
+    elif options.action == "anafora":
+        for result in results_list:
+            run_anafora(result, options.models, paths[options.goldstd]["annotations"], paths[options.goldstd]["text"], {}, options.rules)
     total_time = time.time() - start_time
     logging.info("Total time: %ss" % total_time)
 if __name__ == "__main__":

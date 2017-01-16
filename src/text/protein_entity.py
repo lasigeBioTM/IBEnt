@@ -101,6 +101,8 @@ class ProteinEntity(Entity):
         self.sid = sid
         self.go_ids = []
         self.best_go = None
+        self.ssm_score = 0
+        self.ssm_go_ID = ""
         # self.normalize()
 
     tf_regex = re.compile(r"\A[A-Z]+\d*\w*\d*\Z")

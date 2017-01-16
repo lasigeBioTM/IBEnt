@@ -63,7 +63,6 @@ class IBENT(object):
         self.connect_to_db()
         # Connect to CoreNLP
         self.corenlp = StanfordCoreNLP('http://localhost:9000')
-
         #Load StanfordNER models stored in a specific directory
         self.load_models()
 
@@ -99,6 +98,7 @@ class IBENT(object):
             self.create_annotationset(a[0])
             if a[1] == "jsre":
                 model = JSREKernel(None, a[2], train=False, modelname="annotators/{}/{}.model".format(a[2], a[0]), ner="all")
+                model.basedir = ""
                 model.load_classifier()
                 self.relation_annotators[a] = model
             elif a[1] == "smil":
@@ -170,7 +170,12 @@ class IBENT(object):
                                   did=doctag)
         newdoc.sentence_tokenize("biomedical")
         for i, sentence in enumerate(newdoc.sentences):
-            corenlpres = sentence.process_sentence(self.corenlp)
+            #corenlpres = sentence.process_sentence(self.corenlp)
+            annotators = 'tokenize,ssplit,pos,ner,lemma'
+            corenlpres = self.corenlp.annotate(sentence.text.encode("utf8"),
+                                               properties={'ssplit.eolonly': True, 'annotators': annotators,
+                                                           'outputFormat': 'json',
+                                                           })
             query = """INSERT INTO sentence(senttag, doctag, senttext, sentoffset, corenlp) VALUES (%s, %s, %s, %s, %s);"""
             try:
                 cur.execute(query, (sentence.sid, doctag, sentence.text.encode("utf8"), sentence.offset,

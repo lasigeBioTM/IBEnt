@@ -1,4 +1,4 @@
-# IBEnt
+# IBRel
 Framework for identifying biomedical relations
 
 ## Dependencies:

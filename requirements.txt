@@ -20,3 +20,5 @@ progressbar==2.3
 beautifulsoup4==4.4.1
 cvxopt==1.1.8
 fuzzywuzzy==0.8.0
+html5lib
+python-Levenshtein

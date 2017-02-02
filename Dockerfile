@@ -17,7 +17,7 @@ RUN \
 # Define commonly used JAVA_HOME variable
 ENV JAVA_HOME /usr/lib/jvm/java-8-oracle
 
-RUN apt-get update && apt-get install unzip
+RUN apt-get update && apt-get install unzip && apt-get install netstat
 WORKDIR /bin
 
 # Get Stanford NER 3.5.2
@@ -82,9 +82,9 @@ RUN pip install -e git+https://github.com/garydoranjr/misvm.git#egg=misvm
 # Initial configuration
 COPY settings_base.json /
 RUN python src/config/config.py default
-RUN pip install --upgrade beautifulsoup4
-RUN pip install --upgrade html5lib
-RUN pip install python-Levenshtein 
+#RUN pip install --upgrade beautifulsoup4
+#RUN pip install --upgrade html5lib
+#RUN pip install python-Levenshtein
 ENV RUBYOPT="-KU -E utf-8:utf-8"
 RUN mkdir models
 # Define default command.

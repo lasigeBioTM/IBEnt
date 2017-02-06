@@ -1,5 +1,5 @@
-# IBRel
-Framework for identifying biomedical relations
+# IBEnt
+Framework for identifying biomedical entities
 
 ## Dependencies:
 * Python 2.7 and Java 8
@@ -11,6 +11,8 @@ Framework for identifying biomedical relations
 * Relation extraction
     * [SVM-light-TK](http://disi.unitn.it/moschitti/Tree-Kernel.htm)
     * [Shallow Language Kernel](https://hlt-nlp.fbk.eu/technologies/jsre)
+* Local [ChEBI](https://www.ebi.ac.uk/chebi/) MySQL database if you choose set use_chebi as true
+    * Required ChEBI tables: term, term_synonym, word2term3, word3, descriptor3, SSM_TermDesc, graph_path
 * requirements.txt - run `pip install -r requirements.txt`
 
 ## Configuration
@@ -23,7 +25,6 @@ Then run ./benchmarks/check_setup.sh to confirm if everything is set up correctl
 ## Usage
 To run distant supervision multi-instance learning experiments, use src/trainevaluate.py and check mil.sh for an example.
 
-<<<<<<< HEAD
 You can either run the system in batch or server mode.
 Batch mode expects specific data formats and can be used to train classifiers and evaluate on a test set.
 For example, to train a classifier models/class1.ser.gz from the data on corpus1:
@@ -44,3 +45,6 @@ To map the term to the ChEBI ontology:
 
     python src/evaluate.py chebi corpus2 --results data/results1 --models models/class1
 
+If you just want to send text to previously trained classifiers and get results, use the server mode.
+Start the server with `python src/server.py` and input text with `python src/client`.
+You can also use your own client, sending a POST request to the address in config.host_ip.

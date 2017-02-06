@@ -96,6 +96,7 @@ class Entity(object):
     def normalize(self):
         pass
 
+
 class Entities(object):
     """Group of entities related to a text"""
 
@@ -239,14 +240,16 @@ class Entities(object):
         # logging.info("combined {} entities".format(len(combined)))
         self.elist[name] = combined.values()
 
-    def get_entity_offsets(self, esource, ths, rules):
+    def get_entity_offsets(self, esource, ths, rules, sentence_tokens):
         spans = []
         offsets = Offsets()
+        entity_tokens = set()
+        to_add_entities = []
         for s in self.elist:
             # logging.info("{}".format(s))
             # logging.info("esource: {}".format(es))
             if s.startswith(esource):
-                # logging.info("using {}".format(s))
+                #logging.info("using {}".format(s))
                 for e in self.elist[s]:
                     val = e.validate(ths, rules)
                     if not val:
@@ -258,17 +261,29 @@ class Entities(object):
                         exclude.append(contained_by)
                     toadd, v, overlapped, to_exclude = offsets.add_offset(eid_offset, exclude_this_if=exclude, exclude_others_if=[])
                     if toadd:
-                        # extra_info = ['genia_tags:"' + "+".join([t.genia_tag for t in e.tokens]) + '"']
-                        extra_info = []
-                        extra_info.append('recognized_by:"' + "+".join(e.recognized_by) + '"')
-                        spans.append((e.dstart, e.dend, e.text, extra_info))
-                        # logging.info("added {}".format(e.text))
-                    else:
-                        logging.debug("did not add {}".format(e.text))
+                        to_add_entities.append(e)
+                        entity_tokens.update(set([t.order for t in e.tokens]))
+        for e in to_add_entities:
+            e.set_attributes(sentence_tokens, entity_tokens)
+            # extra_info = ['genia_tags:"' + "+".join([t.genia_tag for t in e.tokens]) + '"']
+            extra_info = []
+            #extra_info.append('recognized_by:"' + "+".join(e.recognized_by) + '"')
+            extra_info.append("left_context={}".format(e.before_context))
+            extra_info.append("right_context={}".format(e.after_context))
+            extra_info.append("left_bitmap={}".format(e.before_events))
+            extra_info.append("type={}".format(e.subtype))
+            if e.type == "event":
+                extra_info.append("modality={}".format(e.modality))
+                extra_info.append("polarity={}".format(e.polarity))
+                extra_info.append("degree={}".format(e.degree))
+            spans.append((e.dstart, e.dend, e.text, extra_info))
+            # logging.info("added {}".format(e.text))
+        #else:
+        #    logging.debug("did not add {}".format(e.text))
         return spans
 
     def get_entity(self, eid, source="goldstandard"):
         for e in self.elist[source]:
             if e.eid == eid:
                 return e
-        print "entity not found:", eid, source
+        print "entity not found:", eid, source, [e.eid for e in self.elist[source]]

@@ -8,8 +8,9 @@ from text.offset import partial_overlap_after, partial_overlap_before, contained
 class MatcherModel(object):
     """Model which matches a fixed list of entities to the text"""
 
-    def __init__(self, path, **kwargs):
+    def __init__(self, path, etype, **kwargs):
         self.path = path
+        self.etype = etype
         self.names = set()
         self.p = []
 
@@ -38,11 +39,11 @@ class MatcherModel(object):
 
     def test(self, corpus):
         logging.info("loading names...")
-        #self.names = pickle.load(open(self.path, "rb"))
+        self.names = pickle.load(open(self.path, "rb"))
         logging.info("compiling regex...")
         for n in self.names:
-            # logging.info(n)
-            self.p.append(re.compile(r"(\A|\s)(" + re.escape(n) + r")(\s|\Z|\.|,)", re.I))
+            logging.info(n)
+            self.p.append(re.compile(r"(\A|\s)(" + n + r")(\s|\Z|\.|,)", re.I))
         # self.p = [re.compile(r"(\A|\s)(" + n + r")(\s|\Z|\.)", rext.I) for n in self.names]
         logging.info("testing {} documents".format(len(corpus.documents)))
         did_count = 1
@@ -88,7 +89,7 @@ class MatcherModel(object):
                 toadd, v, overlapping, to_exclude = offsets.add_offset(offset, exclude_this_if, exclude_others_if)
                 if toadd:
                     #print sentence.sid, (offset.start,offset.end), [(o.start, o.end) for o in offsets.offsets]
-                    sentence.tag_entity(offset.start, offset.end, etype=entity_type, source=self.path)
+                    sentence.tag_entity(offset.start, offset.end, etype=self.etype, source=self.path)
                     for o in to_exclude:
                         # print "excluding {}-{}".format(o.start,o.end)
                         sentence.exclude_entity(o.start, o.end, self.path)

@@ -78,4 +78,11 @@ relation_types = {"mirna-gene": {"source_role": "agent",
                                  "target_role": "target",
                                  "target_types": ("chemical"),
                                  "event": "interaction",
-                                 "keywords": []}}
+                                 "keywords": []},
+                 "temporal":
+                     {"source_role": "agent",
+                     "source_types": ("event"),
+                     "target_role": "target",
+                     "target_types": ("event"),
+                     "event": "temporal",
+                     "keywords": []}}

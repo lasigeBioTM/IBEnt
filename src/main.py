@@ -7,7 +7,9 @@ import codecs
 import logging
 import sys
 import time
-
+import os
+import itertools
+from subprocess import Popen, PIPE
 from pycorenlp import StanfordCoreNLP
 
 from classification.ner.banner import BANNERModel
@@ -18,7 +20,7 @@ from config.corpus_paths import paths
 from classification.ner.crfsuitener import CrfSuiteModel
 from classification.ner.matcher import MatcherModel
 from classification.ner.mirna_matcher import MirnaMatcher
-from classification.ner.simpletagger import BiasModel, feature_extractors
+from classification.ner.simpletagger import BiasModel, feature_extractors, time_features, event_features
 from classification.ner.stanfordner import StanfordNERModel
 from classification.ner.taggercollection import TaggerCollection
 from classification.results import ResultsNER, ResultSetNER
@@ -113,7 +115,7 @@ def main():
                       choices=["load_corpus", "annotate", "classify", "write_results", "write_goldstandard",
                                "train", "test", "train_multiple", "test_multiple", "train_matcher", "test_matcher",
                                "crossvalidation", "train_relations", "test_relations", "load_genia", "load_biomodel",
-                               "merge_corpus", "tuples"])
+                               "merge_corpus", "tuples", "generate_data"])
     parser.add_argument("--goldstd", default="", dest="goldstd", nargs="+",
                         help="Gold standard to be used. Will override corpus, annotations",
                         choices=paths.keys())
@@ -129,6 +131,8 @@ considered when coadministering with megestrol acetate.''',
     parser.add_argument("--tag", dest="tag", default="0", help="Tag to identify the experiment")
     parser.add_argument("--models", dest="models", help="model destination path, without extension")
     parser.add_argument("--entitytype", dest="etype", help="type of entities to be considered", default="all")
+    parser.add_argument("--entitysubtype", dest="subtype", help="subtype of entities to be considered", default="all")
+
     parser.add_argument("--pairtype", dest="ptype", help="type of pairs to be considered", default="all")
     parser.add_argument("--doctype", dest="doctype", help="type of document to be considered", default="all")
     parser.add_argument("--annotated", action="store_true", default=False, dest="annotated",
@@ -167,6 +171,7 @@ considered when coadministering with megestrol acetate.''',
 
         corenlp_client = StanfordCoreNLP('http://localhost:9000')
         corpus = load_corpus(options.goldstd, corpus_path, corpus_format, corenlp_client)
+        #corenlp_process.kill()
         #corpus.load_genia() #TODO optional genia
         corpus.save(paths[options.goldstd]["corpus"])
         if corpus_ann: #add annotation if it is not a test set
@@ -206,6 +211,7 @@ considered when coadministering with megestrol acetate.''',
         corpus_ann = paths[options.goldstd]["annotations"]
         logging.info("loading corpus %s" % corpus_path)
         corpus = pickle.load(open(corpus_path, 'rb'))
+        corpus.name = options.goldstd
         logging.debug("loading annotations...")
         corpus.clear_annotations(options.etype)
         corpus.load_annotations(corpus_ann, options.etype, options.ptype)
@@ -232,18 +238,36 @@ considered when coadministering with megestrol acetate.''',
         elif options.actions == "merge_corpus":
             corpus.save(paths[options.output[1]]["corpus"])
         # training
+        elif options.actions == "generate_data":
+            corpus_path = paths[options.goldstd[0]]["corpus"]
+            print "writing to " + options.goldstd[0] + "_event_time_contains.txt"
+            with open(options.goldstd[0] + "_event_time_contains.txt", 'w') as datafile:
+                for sentence in corpus.get_sentences("goldstandard"):
+                    sentence_entities = [entity for entity in sentence.entities.elist["goldstandard"]]
+                    for pair in itertools.combinations(sentence_entities, 2):
+                        if pair[0].type == "event" and pair[1].type == "time":
+                            pair_label = (pair[1].eid, "temporal") in pair[0].targets
+                            between_text = sentence.text[pair[0].start:pair[1].end]
+                            datafile.write("{0}\t{1.original_id}\t{1.text}\t{2.original_id}\t{2.text}\t{3}\n".format(pair_label,
+                                            pair[0], pair[1], between_text))
+
         elif options.actions == "train":
             if options.crf == "stanford":
                 model = StanfordNERModel(options.models, options.etype)
             elif options.crf == "crfsuite":
-                model = CrfSuiteModel(options.models, options.etype)
+                model = CrfSuiteModel(options.models, options.etype, subtype=options.subtype)
             elif options.crf == "ensemble":
                 model = EnsembleModel(options.models, options.etype, goldstd=options.goldstd[0])
-            model.load_data(corpus, feature_extractors.keys())
+            features = feature_extractors.keys()
+            if options.etype.startswith("time"):
+                features = time_features
+            elif options.etype.startswith("event"):
+                features = event_features
+            model.load_data(corpus, features, options.etype, subtype=options.subtype)
             model.train()
         elif options.actions == "train_matcher": # Train a simple classifier based on string matching
-            model = MatcherModel(options.models)
-            model.train(corpus)
+            model = MatcherModel(options.models, options.etype)
+            model.train_list("temporal_list.txt")
             # TODO: term list option
             #model.train("TermList.txt")
         elif options.actions == "train_multiple": # Train one classifier for each type of entity in this corpus
@@ -290,13 +314,18 @@ considered when coadministering with megestrol acetate.''',
                 if options.crf == "stanford":
                     model = StanfordNERModel(options.models + "_stanford", options.etype)
                 elif options.crf == "crfsuite":
-                    model = CrfSuiteModel(options.models + "_crfsuite", options.etype)
+                    model = CrfSuiteModel(options.models + "_crfsuite", options.etype, subtype=options.subtype)
                 elif options.crf == "banner":
                     model = BANNERModel(options.models, options.etype)
                 elif options.crf == "ensemble":
                     model = EnsembleModel(options.models, options.etype, goldstd=options.goldstd[0])
                 model.load_tagger()
-                model.load_data(corpus, feature_extractors.keys(), mode="test")
+                features = feature_extractors.keys()
+                if options.etype.startswith("time"):
+                    features = time_features
+                elif options.etype.startswith("event"):
+                    features = event_features
+                model.load_data(corpus, features, options.etype, mode="test", subtype=options.subtype)
                 final_results = model.test(corpus)
             #with codecs.open(options.output[1] + ".txt", 'w', 'utf-8') as outfile:
             #    lines = final_results.corpus.write_chemdner_results(options.models, outfile)
@@ -306,7 +335,7 @@ considered when coadministering with megestrol acetate.''',
             if "mirna" in options.models:
                 model = MirnaMatcher(options.models)
             else:
-                model = MatcherModel(options.models)
+                model = MatcherModel(options.models, options.etype)
             results = ResultsNER(options.models)
             results.corpus, results.entities = model.test(corpus)
             allentities = set()

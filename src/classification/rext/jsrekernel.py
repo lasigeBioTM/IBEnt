@@ -96,6 +96,7 @@ class JSREKernel(ReModel):
         if not os.path.isfile(self.resultsfile):
             print "something went wrong with JSRE!"
             print res
+            print self.resultsfile
             sys.exit()
         logging.debug("done.")
 
@@ -112,7 +113,7 @@ class JSREKernel(ReModel):
         lemmas = [t.lemma for t in tokens]
         ner = [t.tag for t in tokens]
         #logging.debug("{} {} {} {}".format(len(tokens1), len(pos), len(lemmas), len(ner)))
-        return self.blind_all_entities(tokens_text, sentence.entities.elist["goldstandard"],
+        return self.blind_all_entities(tokens_text, sentence.entities.elist[self.ner_model],
                                        [e1id, e2id], pos, lemmas, ner)
 
     def annotate_sentence(self, sentence):
@@ -236,12 +237,23 @@ class JSREKernel(ReModel):
                 sids.append((pair[0].sid, pair[0].sid))
                 sn1 = int(sid1[1:])
                 sn2 = int(sid2[1:])
+
                 if pair[0].start == pair[1].start or pair[0].end == pair[1].end:
                     continue
                 if pairtype in ("Has_Sequence_Identical_To", "Is_Functionally_Equivalent_To") and pair[0].type != pair[1].type:
                     continue
                 if pair[0].type in self.entitytypes[0] and pair[1].type in self.entitytypes[1]: # or\
                     # logging.debug(pair)
+                    entities_between = sentence.get_entitites_between(pair[0], pair[1], self.ner_model)
+                    if len(entities_between) > 1:
+                        print entities_between
+                        continue
+                    """if pair[0].type == pairtypes[0]:
+
+                    else:
+                        e1id = pair[1].eid
+                        e2id = pair[0].eid
+                        pair = (pair[1], pair[0])"""
                     # print e1id, e2id
                     e1id = pair[0].eid
                     e2id = pair[1].eid
@@ -329,7 +341,7 @@ class JSREKernel(ReModel):
             #    print pairs[pair][ddi.PAIR_TOKENS][it][0].lstrip()
             #    sys.exit()
 
-            elements.append("&&".join([str(it), tokentext,
+            elements.append("&&".join([str(it), tokentext.strip(),
                               lemma,
                               pos[it],
                               tokentype, tokenlabel]))

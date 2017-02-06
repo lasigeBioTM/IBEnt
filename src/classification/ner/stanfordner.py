@@ -261,3 +261,4 @@ def kill_process(port):
             pid = match.group('pid')
             logging.info("killing process {}".format(pid))
             Popen(['kill', '-9', pid])
+>>>>>>> master

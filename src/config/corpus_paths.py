@@ -10,15 +10,49 @@ jnlpba_base = "corpora/JNLPBA/"
 
 
 paths = {}
-for i in range(1,11):
-    paths["mirna_ds{}".format(i)] = {'corpus': "corpora/mirna-ds/abstracts_11k.txt_{}.pickle".format(i),
-                                    'format': "mirna",
-                                    'annotations': ""}
-    paths["mirna_ds_annotated{}".format(i)] = {'corpus': "data/mirna_ds_annotated_{}.pickle".format(i),
-                                               'format': "mirna",
-                                               'annotations': ""
-                                              }
+
 paths.update({
+    'braincancer_train':{
+        'text': "corpora/thymedata-1.1.0/text/train_brain/",
+        'annotations': "corpora/thymedata-1.1.0/braincancer/train/",
+        'format': "tempeval",
+        'corpus': "data/braincancer_train.pickle"
+        },
+    'braincancer_test':{
+        'text': "corpora/thymedata-1.1.0/text/test_brain/",
+        'annotations': "",
+        'format': "tempeval",
+        'corpus': "data/braincancer_test.pickle"
+        },
+    'sharecorpus':{
+        'text': "corpora/sharecorpus/",
+        'annotations': 'corpora/sharecorpus/',
+        'corpus': "data/sharecorpus.pickle",
+        'format': 'mirtex'
+    },
+    'coloncancer_train':{
+        'text': "corpora/thymedata-1.1.0/text/Train/",
+        'annotations': "corpora/thymedata-1.1.0/coloncancer/Train/",
+        'format': "tempeval",
+        'corpus': "data/coloncancer_train.pickle"
+    },
+    'coloncancer_sample':{
+        'text': "corpora/thymedata-1.1.0/text/sample/",
+        'annotations': "corpora/thymedata-1.1.0/coloncancer/sample/",
+        'format': "tempeval",
+        'corpus': "data/coloncancer_sample.pickle"
+    },
+    'coloncancer_dev':{
+            'text': "corpora/thymedata-1.1.0/text/Dev/",
+            'annotations': "corpora/thymedata-1.1.0/coloncancer/Dev/",
+            'format': "tempeval",
+            'corpus': "data/coloncancer_dev.pickle"
+        },
+    'coloncancer_test': {
+        'text': "corpora/thymedata-1.1.0/text/test/",
+        'annotations': "corpora/thymedata-1.1.0/coloncancer/test/",
+        'format': "tempeval",
+        'corpus': "data/coloncancer_test.pickle"
 
     ### miRNA corpus (Bagewadi 2013)
     'miRNACorpus_train': {

@@ -260,6 +260,7 @@ class Document(object):
                 # print "found it!"
                 return s
         for s in self.sentences:
+            logging.debug("sentence not found: {}-{}".format(start, end))
             if len(s.tokens) > 0:
                 logging.debug("{} {} {} {} {}".format(s.tokens[0].dstart <= start, s.tokens[-1].dend >= end,
                                                     s.tokens[0].dstart, s.tokens[-1].dend, s.text.encode("utf-8")))
@@ -269,7 +270,7 @@ class Document(object):
         offsets = []
         for s in self.sentences:
             if s.entities:
-                offsets += s.entities.get_entity_offsets(esource, ths, rules)
+                offsets += s.entities.get_entity_offsets(esource, ths, rules, s.tokens)
         return offsets
 
     def get_entity(self, eid, source="goldstandard"):

@@ -33,7 +33,7 @@ class ChemdnerCorpus(Corpus):
                 t = time.time()
                 # each line is PMID  title   abs
                 tsv = line.split('\t')
-                doctext = tsv[1].strip().replace("<", "(").replace(">", ")") + " "
+                doctext = tsv[1].strip().replace("<", "(").replace(">", ")").replace(". ", ", ") + ". "
                 doctext += tsv[2].strip().replace("<", "(").replace(">", ")")
                 newdoc = Document(doctext, process=False,
                                   did=tsv[0], title=tsv[1].strip() + ".")
@@ -63,17 +63,18 @@ class ChemdnerCorpus(Corpus):
                     if entitytype == "all" or entitytype == "chemical" or entitytype == chemt:
                         title_offset = 0
                         if doct == "A":
-                            title_offset = len(self.documents[pmid].title)
+                            title_offset = len(self.documents[pmid].title) + 1 # account for extra .
                         start, end = start + title_offset, end + title_offset
                         sentence = self.documents[pmid].find_sentence_containing(start, end, chemdner=False)
                         if sentence:
-                            sentence.tag_entity(start - sentence.offset, end - sentence.offset, chemt, text=text)
+                            sentence.tag_entity(start - sentence.offset, end - sentence.offset, "chemical", text=text,
+                                                subtype=chemt)
                         else:
                             print "sentence not found between:", start, end
-                            print "ignored ", text
-                            print len(self.documents[pmid].title), self.documents[pmid].title
-                            for s in self.documents[pmid].sentences:
-                                print s.sid, s.tokens[0].dstart, s.tokens[-1].dend, s.text
+                            print "ignored ", text.encode("utf-8")
+                            #print len(self.documents[pmid].title), self.documents[pmid].title
+                            #for s in self.documents[pmid].sentences:
+                            #    print s.sid, s.tokens[0].dstart, s.tokens[-1].dend, s.text
                 else:
                     logging.info("%s not found!" % pmid)
 
@@ -81,7 +82,8 @@ def write_chemdner_files(results, models, goldset, ths, rules):
     """ results files for CHEMDNER CEMP and CPD tasks"""
     print "saving results to {}".format(results.path + ".tsv")
     with io.open(results.path + ".tsv", 'w', encoding='utf-8') as outfile:
-        cpdlines, max_entities = results.corpus.write_chemdner_results(models, outfile, ths, rules)
+        outfile.write(u"DOCUMENT_ID\tSECTION\tINIT\tEND\tSCORE\tANNOTATED_TEXT\tTYPE\tDATABASE_ID\n")
+        lines, cpdlines, max_entities = results.corpus.write_chemdner_results(models, outfile, ths, rules)
     cpdlines = sorted(cpdlines, key=itemgetter(2))
     with open(results.path + "_cpd.tsv", "w") as cpdfile:
         for i, l in enumerate(cpdlines):
@@ -129,7 +131,7 @@ def get_chemdner_gold_ann_set(goldann, etype, text_path, doctype):
         entity_text = docs[x[0] + "." + x[1]][start:end]
         title_offset = 0
         if x[1] == "A":
-            title_offset = len(docs[x[0] + ".T"]) + 1
+            title_offset = len(docs[x[0] + ".T"]) + 2
         goldlist.append((x[0], start + title_offset, end + title_offset, entity_text))
     #print goldlist[0:2]
     goldset = set(goldlist)

@@ -2,7 +2,7 @@ from __future__ import division, absolute_import, unicode_literals
 
 import xml.etree.ElementTree as ET
 import logging
-from text.offset import Offset, Offsets, perfect_overlap, contained_by
+from text.offset import Offset, Offsets, perfect_overlap, contained_by, no_overlap
 
 
 class Entity(object):
@@ -26,6 +26,7 @@ class Entity(object):
         self.subentities = []
         self.targets = [] # targets should be (eid, relationtype)
         self.score = kwargs.get("score", 0)
+        self.scores = {}
         self.original_id = kwargs.get("original_id")
         self.normalized = self.text
         self.normalized_score = 0
@@ -35,26 +36,34 @@ class Entity(object):
 
 
     def __str__(self):
-        output = "{}, s-offset: {}:{}, d-offset: {}:{}, tokens: {}, type: {}".format(self.text, self.start, self.end,
-                                                                                     self.dstart, self.dend,
-                                                                                     ' '.join([t.text for t in self.tokens]),
-                                                                                     self.type)
+        try:
+            output = "{}, s-offset: {}:{}, d-offset: {}:{}, tokens: {}, type: {}".format(self.text, self.start, self.end,
+                                                                                         self.dstart, self.dend,
+                                                                                         ' '.join([t.text for t in self.tokens]) ,
+                                                                                         self.type)
+        except UnicodeDecodeError:
+            output = "{}, s-offset: {}:{}, d-offset: {}:{}, tokens: {}, type: {}".format(self.text, self.start, self.end,
+                                                                                         self.dstart, self.dend,
+                                                                                         self.text,
+                                                                                         self.type)
         return output
 
-    def write_chemdner_line(self, outfile, rank=1):
+    def write_chemdner_line(self, outfile, rank=1, titleoffset=0):
         if self.sid.endswith(".s0"):
             ttype = "T"
+            start = str(self.tokens[0].dstart)
+            end = str(self.tokens[-1].dend)
         else:
             ttype = "A"
-        start = str(self.tokens[0].dstart)
-        end = str(self.tokens[-1].dend)
-        loc = ttype + ":" + start + ":" + end
+            start = str(self.tokens[0].dstart - 1 - titleoffset) # because of the extra dot
+            end = str(self.tokens[-1].dend - 1 - titleoffset)
+        loc = ttype + "\t" + start + "\t" + end
         if isinstance(self.score ,dict):
             conf = sum(self.score.values())/len(self.score)
         else:
             conf = self.score
         #outfile.write('\t'.join([self.did, loc, str(rank)]) + '\n')
-        outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(self.did, loc, str(rank), str(conf), self.text))
+        outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n".format(self.did, loc, str(conf), self.text, "unknown", str(rank)))
         return (self.did, loc, str(rank), str(conf), self.text)
 
     def write_bioc_annotation(self, parent):
@@ -134,7 +143,7 @@ class Entities(object):
         return entities
 
 
-    def write_chemdner_results(self, source, outfile, ths={"ssm":0.0}, rules=[], totalentities=0):
+    def write_chemdner_results(self, source, outfile, titleoffset, ths={"ssm":0.0}, rules=[], totalentities=0):
         """
         Write results that can be evaluated with the BioCreative evaluation script
         :param source: Base model path
@@ -164,10 +173,11 @@ class Entities(object):
                     exclude = [perfect_overlap]
                     if "contained_by" in rules:
                         exclude.append(contained_by)
-                    toadd, v, alt = offsets.add_offset(eid_offset, exclude_if=exclude)
+                    toadd, v, overlapping, to_exclude = offsets.add_offset(eid_offset, exclude_this_if=exclude,
+                                                                           exclude_others_if=[])
                     if toadd:
                         #logging.info("added %s" % e)
-                        line = e.write_chemdner_line(outfile, rank)
+                        line = e.write_chemdner_line(outfile, rank, titleoffset)
                         lines.append(line)
                         rank += 1
         return lines, rank
@@ -190,7 +200,7 @@ class Entities(object):
         combined = {}
         offsets = Offsets()
         for s in self.elist:
-            #logging.info("%s - %s" % (self.sid, s))
+            # logging.info("%s - %s" % (self.sid, s))
             # use everything except what's already combined and gold standard
             if (s.endswith(base_model) or base_model == "all") and s != name and not s.startswith("goldstandard"):
                 for e in self.elist[s]: # TODO: filter for classifier confidence
@@ -206,7 +216,7 @@ class Entities(object):
                         overlap = eid_offset.overlap(o)
                         if overlap == perfect_overlap:
                             combined[o.eid].recognized_by.append(s)
-                            combined[o.eid].score[s] = e.score
+                            combined[o.eid].scores[s] = e.score
                             # if hasattr(e, "ssm_score"):
                             #     combined[o.eid].ssm_score_all[s] = e.ssm_score
                             # else:
@@ -215,10 +225,12 @@ class Entities(object):
                             #logging.info(combined[o.eid].ssm_score_all)
                             #logging.info("added {0}-{1} to entity {2}".format(s.split("_")[-1], e.text, combined[o.eid].text))
                             break
+                        elif overlap != no_overlap:
+                            added = True # skip this
                     if not added:
                         offsets.offsets.add(eid_offset)
                         e.recognized_by = [s]
-                        e.score = {s: e.score}
+                        e.scores[s] = e.score
                         # if hasattr(e, "ssm_score"):
                         #     e.ssm_score_all= {s: e.ssm_score}
                         # else:

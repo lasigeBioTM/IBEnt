@@ -2,6 +2,7 @@ from __future__ import division, absolute_import
 #from nltk.stem.porter import PorterStemmer
 #import jsonrpclib
 #from simplejson import loads
+import io
 import logging
 import os
 from subprocess import Popen, PIPE
@@ -28,6 +29,7 @@ def clean_whitespace(text):
         replacedtext = replacedtext.replace(code, " ")
     return replacedtext
 
+sources = ("PubMed", "PMC")
 
 class Document(object):
     """A document is constituted by one or more sentences. It should have an ID and
@@ -40,6 +42,7 @@ class Document(object):
         self.did = kwargs.get("did", "d0")
         self.invalid_sids = []
         self.title_sids = []
+        self.source = kwargs.get("source")
         self.pairs = Pairs()
         if ssplit:
             self.sentence_tokenize(doctype)
@@ -57,7 +60,7 @@ class Document(object):
         #    self.sentences.append(Sentence(self.title, sid=sid, did=self.did))
         # inputtext = clean_whitespace(self.text)
         inputtext = self.text
-        with codecs.open("/tmp/geniainput.txt", 'w', 'utf-8') as geniainput:
+        with io.open("/tmp/geniainput.txt", 'w', encoding='utf-8') as geniainput:
             geniainput.write(inputtext)
         current_dir = os.getcwd()
         os.chdir(geniass_path)
@@ -65,7 +68,7 @@ class Document(object):
         Popen(geniaargs, stdout=PIPE, stderr=PIPE).communicate()
         os.chdir(current_dir)
         offset = 0
-        with codecs.open("/tmp/geniaoutput.txt", 'r', "utf-8") as geniaoutput:
+        with io.open("/tmp/geniaoutput.txt", 'r', encoding="utf-8") as geniaoutput:
             for l in geniaoutput:
                 stext = l.strip()
                 if stext == "":
@@ -107,10 +110,10 @@ class Document(object):
                 print corenlpres
                 continue
             else:
-                s.process_corenlp_sentence(corenlpres)
+                s.process_corenlp_output(corenlpres)
 
 
-    def tag_chemdner_entity(self, start, end, subtype, **kwargs):
+    def tag_chemdner_entity(self, start, end, subtype, source="goldstandard", **kwargs):
         """
         Create an CHEMDNER entity relative to this document.
         :param start: Start index of entity
@@ -120,25 +123,24 @@ class Document(object):
         :return:
         """
         doct = kwargs.get("doct")
-        if doct == "T": # If it's in the title, we already know the sentence (it's the first)
-            self.sentences[0].tag_entity(start, end, subtype, **kwargs)
-        else: # we have to find the sentence
-            found = False
-            totalchars = 0
-            for s in self.sentences[1:]:
-                if totalchars <= start and totalchars + len(s.text) >= end:  # entity is in this sentence
-                    s.tag_entity(start-totalchars, end-totalchars, subtype,
-                                 totalchars=totalchars, **kwargs)
-                    # print "found entity on sentence %s" % s.sid
-                    found = True
-                    break
-
-                totalchars += len(s.text)
-                totalchars = self.get_space_between_sentences(totalchars)
-            if not found:
-                print "could not find sentence for %s:%s on %s!" % (start,
-                                                                       end, self.did)
-                # sys.exit()
+        title_offset = 0
+        if doct == "A":
+            title_offset = len(self.title) + 1  # account for extra .
+        start, end = start + title_offset, end + title_offset
+        sentence = self.find_sentence_containing(start, end, chemdner=False)
+        if sentence:
+            eid = sentence.tag_entity(start - sentence.offset, end - sentence.offset, "chemical", source=source,
+                                      text=kwargs.get("text"),
+                                subtype=subtype, score=kwargs.get("score"))
+            if eid:
+                entity = sentence.entities.get_entity(eid, source)
+                return entity
+        else:
+            print "sentence not found between:", start, end
+            print "ignored ", kwargs.get("text")
+            # print len(self.documents[pmid].title), self.documents[pmid].title
+            # for s in self.documents[pmid].sentences:
+            #    print s.sid, s.tokens[0].dstart, s.tokens[-1].dend, s.text
 
     def add_relation(self, entity1, entity2, subtype, relation, source="goldstandard", **kwargs):
         if self.pairs.pairs:
@@ -146,7 +148,7 @@ class Document(object):
         else:
             pid = self.did + ".p0"
         between_text = self.text[entity1.dend:entity2.start]
-        logging.info("adding {}:{}=>{}".format(pid, entity1.text.encode("utf8"), entity2.text.encode("utf8")))
+        logging.debug("adding {}:{}=>{}".format(pid, entity1.text.encode("utf8"), entity2.text.encode("utf8")))
         # print between_text
         if subtype == "tlink":
             pair = TLink(entity1, entity2, relation=relation, original_id=kwargs.get("original_id"),
@@ -190,7 +192,7 @@ class Document(object):
         for s in self.sentences:
             # print "processing", s.sid, "with", len(s.entities.elist[source]), "entities"
             if s.entities:
-                res = s.entities.write_chemdner_results(source, outfile, ths, rules, totalentities+1)
+                res = s.entities.write_chemdner_results(source, outfile, len(self.sentences[0].text), ths, rules, totalentities+1)
                 lines += res[0]
                 totalentities = res[1]
         return lines
@@ -252,16 +254,16 @@ class Document(object):
             firstsent = 0
         for i, s in enumerate(self.sentences[firstsent:]):
             if len(s.tokens) == 0:
-                logging.debug("sentence without tokens: {} {}".format(s.sid, s.text))
+                #logging.debug("sentence without tokens: {} {}".format(s.sid, s.text.encoding("utf-8")))
                 continue
             if s.tokens[0].dstart <= start and s.tokens[-1].dend >= end:
                 # print "found it!"
                 return s
         for s in self.sentences:
             logging.debug("sentence not found: {}-{}".format(start, end))
-            if s.tokens:
+            if len(s.tokens) > 0:
                 logging.debug("{} {} {} {} {}".format(s.tokens[0].dstart <= start, s.tokens[-1].dend >= end,
-                                                s.tokens[0].dstart, s.tokens[-1].dend, s.text))
+                                                    s.tokens[0].dstart, s.tokens[-1].dend, s.text.encode("utf-8")))
         return None
 
     def get_entity_offsets(self, esource, ths, rules):

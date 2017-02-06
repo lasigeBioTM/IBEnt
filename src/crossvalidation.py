@@ -6,7 +6,7 @@ import argparse
 import pickle
 import sys
 
-import config.corpus_paths
+from config.corpus_paths import paths
 from classification.ner.crfsuitener import CrfSuiteModel
 from classification.ner.simpletagger import feature_extractors
 from classification.ner.stanfordner import StanfordNERModel
@@ -15,6 +15,7 @@ from config import config
 from evaluate import get_gold_ann_set, get_results
 # from postprocessing.chebi_resolution import add_chebi_mappings
 # from postprocessing.ssm import add_ssm_score
+from reader.chemdner_corpus import write_chemdner_files
 from text.corpus import Corpus
 
 
@@ -25,7 +26,7 @@ def run_crossvalidation(goldstd_list, corpus, model, cv, crf="stanford", entity_
     size = int(len(doclist)/cv)
     sublists = chunks(doclist, size)
     logging.debug("Chunks:")
-    logging.debug(sublists)
+    #logging.debug(sublists)
     p, r = [], []
     all_results = ResultsNER(model)
     all_results.path = model + "_results"
@@ -56,9 +57,10 @@ def run_crossvalidation(goldstd_list, corpus, model, cv, crf="stanford", entity_
             train_model = StanfordNERModel(basemodel, entity_type)
         elif crf == "crfsuite":
             train_model = CrfSuiteModel(basemodel, entity_type)
-        train_model.load_data(train_corpus, feature_extractors.keys())
+        train_model.load_data(train_corpus, feature_extractors.keys(), entity_type)
         train_model.train()
-
+        del train_corpus
+        del train_model
         # test
         logging.info('CV{} - TEST'.format(nlist))
         test_model = None
@@ -69,14 +71,14 @@ def run_crossvalidation(goldstd_list, corpus, model, cv, crf="stanford", entity_
         test_model.load_tagger(port=9191+nlist)
         test_model.load_data(test_corpus, feature_extractors.keys(), mode="test")
         final_results = None
-        final_results = test_model.test(test_corpus, port=9191+nlist)
+        final_results = test_model.test(test_corpus)
         if crf == "stanford":
             test_model.kill_process()
         final_results.basepath = basemodel + "_results"
         final_results.path = basemodel
-
         all_results.entities.update(final_results.entities)
         all_results.corpus.documents.update(final_results.corpus.documents)
+        test_corpus = None
         # validate
         """if config.use_chebi:
             logging.info('CV{} - VALIDATE'.format(nlist))
@@ -88,12 +90,14 @@ def run_crossvalidation(goldstd_list, corpus, model, cv, crf="stanford", entity_
         logging.info('CV{} - EVALUATE'.format(nlist))
         test_goldset = set()
         for gs in goldstd_list:
-            goldset = get_gold_ann_set(config.corpus_paths.paths[gs]["format"], config.corpus_paths.paths[gs]["annotations"], entity_type,
-                                       "pairtype", config.corpus_paths.paths[gs]["text"])
+            logging.info("loading gold standard %s" % paths[gs]["annotations"])
+            goldset = get_gold_ann_set(paths[gs]["format"], paths[gs]["annotations"], entity_type,
+                                       "pairtype", paths[gs]["text"])
             for g in goldset[0]:
                 if g[0] in testids:
                     test_goldset.add(g)
         precision, recall = get_results(final_results, basemodel, test_goldset, {}, [])
+        write_chemdner_files(final_results, basemodel, goldset, {}, {})
         # evaluation = run_chemdner_evaluation(config.paths[goldstd]["cem"], basemodel + "_results.txt", "-t")
         # values = evaluation.split("\n")[1].split('\t')
         p.append(precision)
@@ -105,8 +109,8 @@ def run_crossvalidation(goldstd_list, corpus, model, cv, crf="stanford", entity_
     print "recall: average={}  all={}".format(str(ravg), '|'.join([str(rr) for rr in r]))
     all_goldset = set()
     for gs in goldstd_list:
-        goldset = get_gold_ann_set(config.corpus_paths.paths[gs]["format"], config.corpus_paths.paths[gs]["annotations"], entity_type, "",
-                                   config.corpus_paths.paths[gs]["text"])
+        goldset = get_gold_ann_set(paths[gs]["format"], paths[gs]["annotations"], entity_type, "",
+                                   paths[gs]["text"])
         for g in goldset[0]:
             all_goldset.add(g)
     get_results(all_results, model, all_goldset, {}, [])
@@ -125,7 +129,7 @@ def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument("--goldstd", default="", dest="goldstd", nargs="+",
                         help="Gold standard to be used. Will override corpus, annotations",
-                        choices=config.corpus_paths.paths.keys())
+                        choices=paths.keys())
     parser.add_argument("--submodels", default="", nargs='+', help="sub types of classifiers"),
     parser.add_argument("--corpus", dest="corpus", nargs=2,
                       default=["chemdner", "CHEMDNER/CHEMDNER_SAMPLE_JUNE25/chemdner_sample_abstracts.txt"],
@@ -163,10 +167,12 @@ def main():
     corpus_name = "&".join(options.goldstd)
     corpus = Corpus("corpus/" + corpus_name)
     for g in options.goldstd:
-        corpus_path = config.corpus_paths.paths[g]["corpus"]
+        corpus_path = paths[g]["corpus"]
         logging.info("loading corpus %s" % corpus_path)
         this_corpus = pickle.load(open(corpus_path, 'rb'))
-        corpus.documents.update(this_corpus.documents)
+        #docs = this_corpus.documents
+        docs = dict((k, this_corpus.documents[k]) for k in this_corpus.documents.keys())
+        corpus.documents.update(docs)
     run_crossvalidation(options.goldstd, corpus, options.models, options.cv, options.crf, options.etype)
 
     total_time = time.time() - start_time

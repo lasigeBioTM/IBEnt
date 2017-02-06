@@ -13,6 +13,7 @@ from subprocess import Popen, PIPE
 from pycorenlp import StanfordCoreNLP
 
 from classification.ner.banner import BANNERModel
+from classification.ner.ensemble import EnsembleModel
 from classification.rext.mirtex_rules import MirtexClassifier
 from classification.rext.multiinstance import MILClassifier
 from config.corpus_paths import paths
@@ -33,6 +34,7 @@ from classification.rext.svmtk import SVMTKernel
 from config import config
 from reader.aimed_corpus import AIMedCorpus
 from reader.bc2gm_corpus import BC2GMCorpus
+from reader.brat_corpus import BratCorpus
 from reader.chebi_corpus import ChebiCorpus
 from reader.chemdner_corpus import ChemdnerCorpus
 from reader.ddi_corpus import DDICorpus
@@ -101,6 +103,9 @@ def load_corpus(goldstd, corpus_path, corpus_format, corenlp_client):
     elif corpus_format == "aimed":
         corpus = AIMedCorpus(corpus_path)
         corpus.load_corpus(corenlp_client)
+    elif corpus_format == "brat":
+        corpus = BratCorpus(corpus_path)
+        corpus.load_corpus(corenlp_client)
     return corpus
 
 def main():
@@ -110,7 +115,7 @@ def main():
                       choices=["load_corpus", "annotate", "classify", "write_results", "write_goldstandard",
                                "train", "test", "train_multiple", "test_multiple", "train_matcher", "test_matcher",
                                "crossvalidation", "train_relations", "test_relations", "load_genia", "load_biomodel",
-                               "merge_corpus", "generate_data"])
+                               "merge_corpus", "tuples", "generate_data"])
     parser.add_argument("--goldstd", default="", dest="goldstd", nargs="+",
                         help="Gold standard to be used. Will override corpus, annotations",
                         choices=paths.keys())
@@ -135,7 +140,7 @@ considered when coadministering with megestrol acetate.''',
     parser.add_argument("-o", "--output", "--format", dest="output",
                         nargs=2, help="format path; output formats: xml, html, tsv, text, chemdner.")
     parser.add_argument("--crf", dest="crf", help="CRF implementation", default="stanford",
-                        choices=["stanford", "crfsuite", "banner"])
+                        choices=["stanford", "crfsuite", "banner", "ensemble"])
     parser.add_argument("--log", action="store", dest="loglevel", default="WARNING", help="Log level")
     parser.add_argument("--kernel", action="store", dest="kernel", default="svmtk", help="Kernel for relation extraction")
     options = parser.parse_args()
@@ -188,6 +193,15 @@ considered when coadministering with megestrol acetate.''',
         corpus = pickle.load(open(corpus_path, 'rb'))
         corpus.load_biomodel()
         corpus.save(paths[options.goldstd]["corpus"])
+    elif options.actions == "tuples":
+        options.goldstd = options.goldstd[0]
+        corpus_path = paths[options.goldstd]["corpus"]
+        corpus_ann = paths[options.goldstd]["annotations"]
+        logging.info("loading corpus %s" % corpus_path)
+        corpus = pickle.load(open(corpus_path, 'rb'))
+        logging.info("converting to tuples...")
+        corpus.to_tuple()
+        corpus.save(paths[options.goldstd]["corpus"])
     elif options.actions == "annotate": # rext-add annotation to corpus
         if len(options.goldstd) > 1:
             print "load only one corpus each time"
@@ -209,7 +223,10 @@ considered when coadministering with megestrol acetate.''',
             corpus_path = paths[g]["corpus"]
             logging.info("loading corpus %s" % corpus_path)
             this_corpus = pickle.load(open(corpus_path, 'rb'))
-            corpus.documents.update(this_corpus.documents)
+            #logging.info("adding {} documents".format(len(documents)))
+            # docs = this_corpus.documents
+            docs = dict((k, this_corpus.documents[k]) for k in this_corpus.documents.keys()[:13000])
+            corpus.documents.update(docs)
         if options.actions == "write_goldstandard":
             model = BiasModel(options.output[1])
             model.load_data(corpus, [])
@@ -239,6 +256,8 @@ considered when coadministering with megestrol acetate.''',
                 model = StanfordNERModel(options.models, options.etype)
             elif options.crf == "crfsuite":
                 model = CrfSuiteModel(options.models, options.etype, subtype=options.subtype)
+            elif options.crf == "ensemble":
+                model = EnsembleModel(options.models, options.etype, goldstd=options.goldstd[0])
             features = feature_extractors.keys()
             if options.etype.startswith("time"):
                 features = time_features
@@ -293,11 +312,13 @@ considered when coadministering with megestrol acetate.''',
                 final_results = allresults.combine_results()
             else:
                 if options.crf == "stanford":
-                    model = StanfordNERModel(options.models, options.etype)
+                    model = StanfordNERModel(options.models + "_stanford", options.etype)
                 elif options.crf == "crfsuite":
-                    model = CrfSuiteModel(options.models, options.etype, subtype=options.subtype)
+                    model = CrfSuiteModel(options.models + "_crfsuite", options.etype, subtype=options.subtype)
                 elif options.crf == "banner":
                     model = BANNERModel(options.models, options.etype)
+                elif options.crf == "ensemble":
+                    model = EnsembleModel(options.models, options.etype, goldstd=options.goldstd[0])
                 model.load_tagger()
                 features = feature_extractors.keys()
                 if options.etype.startswith("time"):

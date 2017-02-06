@@ -1,13 +1,16 @@
+
 import codecs
 import logging
 import unicodedata
+
 from subprocess import Popen, PIPE
 import sys
 import os
 import atexit
 import time
 import cPickle as pickle
-sys.path.append(os.path.abspath(os.path.dirname(__file__) + '../../..'))
+sys.path.append(os.path.abspath(os.path.dirname(__file__)
+import gc
 from classification.model import Model
 from text.chemical_entity import element_base, ChemicalEntity
 from text.chemical_entity import amino_acids
@@ -60,8 +63,8 @@ feature_extractors = {# "text": lambda x, i: x.tokens[i].text,
 
 chem_features = feature_extractors.copy()
 chem_features.update({ "greek": lambda x, i: str(has_greek_symbol(x.tokens[i].text)),
-                                       "aminoacid": lambda x, i: str(any(w in amino_acids for w in x.tokens[i].text.split('-'))),
-                                       "periodictable": lambda x, i: str(x.tokens[i].text in element_base.keys() or x.tokens[i].text.title() in zip(*element_base.values())[0])
+                        "aminoacid": lambda x, i: str(any(w in amino_acids for w in x.tokens[i].text.split('-'))),
+                        "periodictable": lambda x, i: str(x.tokens[i].text in element_base.keys() or x.tokens[i].text.title() in zip(*element_base.values())[0])
                                      })
 
 prot_features = feature_extractors.copy()
@@ -159,18 +162,6 @@ def word_in_dictionary(word, dictionary):
     # TODO:
     pass
 
-#def prev_wordclass(sentence, i, n=1):
-    #if i - n < 0:
-        #return "BOS"
-    #else:
-        #return wordclass(sentence.tokens[i-n].text)
-
-#def next_wordclass(sentence, i, n=1):
-    #if i + n >= len(sentence.tokens):
-        #return "EOS"
-    #else:
-        #return wordclass(sentence.tokens[i+n].text)
-
 def get_wordclass(sentence, i, n):
     if i + n >= len(sentence.tokens):
         return "EOS"
@@ -252,7 +243,6 @@ def suffix(sentence, i , size, n):
     else:
         return u"SUFFIX{}={}".format(n, sentence.tokens[i+n].text[-size:])
 
-
 def wordclass(word):
     wclass = ''
     for c in word:
@@ -293,11 +283,13 @@ class SimpleTaggerModel(Model):
         self.sids = []
         self.tagger = None
         self.trainer = None
-        self.sentences = []
+        #self.sentences = []
         self.etype = etype
         self.subtype = kwargs.get("subtype", "all")
 
-    def load_data(self, corpus, flist, etype="all", mode="train", doctype="all", subtype="all"):
+
+    def load_data(self, corpus, flist, etype="all", mode="train", doctype="all"):
+        #tr = tracker.SummaryTracker()
         """
             Load the data from the corpus to the format required by crfsuite.
             Generate the following variables:
@@ -311,22 +303,22 @@ class SimpleTaggerModel(Model):
         nsentences = 0
         didx = 0
         savecorpus = False # do not save the corpus if no new features are generated
-        for did in corpus.documents:
+        for di, did in enumerate(corpus.documents):
+            logging.info("{} - {}/{}".format(did, di, len(corpus.documents)))
             if doctype != "all" and doctype not in did:
                 continue
             # logging.debug("processing doc %s/%s" % (didx, len(corpus.documents)))
             for si, sentence in enumerate(corpus.documents[did].sentences):
+                # logging.info("{}/{}".format(si, len(corpus.documents[did].sentences)))
                 # skip if no entities in this sentence
-                #if sentence.sid in corpus.documents[did].invalid_sids:
-                #    logging.debug("Invalid sentence: {} - {}".format(sentence.sid, sentence.text))
-                #    continue
-                #if sentence.sid in corpus.documents[did].title_sids:
-                #    logging.debug("Title sentence: {} - {}".format(sentence.sid, sentence.text))
-                #    continue
+                if sentence.sid in corpus.documents[did].invalid_sids:
+                    logging.debug("Invalid sentence: {} - {}".format(sentence.sid, sentence.text))
+                    continue
+                if sentence.sid in corpus.documents[did].title_sids:
+                    logging.debug("Title sentence: {} - {}".format(sentence.sid, sentence.text))
+                    continue
                 if mode == "train" and "goldstandard" not in sentence.entities.elist:
                     # logging.debug("Skipped sentence without entities: {}".format(sentence.sid))
-                    continue
-                if "section id" in sentence.text:
                     continue
                 sentencefeatures = []
                 sentencelabels = []
@@ -334,7 +326,7 @@ class SimpleTaggerModel(Model):
                 sentencesubtypes = []
                 for i in range(len(sentence.tokens)):
                     if sentence.tokens[i].text:
-                        tokensubtype = sentence.tokens[i].tags.get("goldstandard_subtype", "none")
+                        #tokensubtype = sentence.tokens[i].tags.get("goldstandard_subtype", "none")
                         # if fname in sentence.tokens[i].features:
                         #     tokenfeatures = sentence.tokens[i].features[fname]
                             #logging.info("loaded features from corpus: %s" % tokenfeatures)
@@ -343,31 +335,41 @@ class SimpleTaggerModel(Model):
                         #     else:
                         #         tokenlabel = sentence.tokens[i].tags.get("goldstandard_" + type, "other")
                         # else:
-                        tokenfeatures, tokenlabel = self.generate_features(sentence, i, flist, etype, subtype=subtype)
+                        tokenfeatures, tokenlabel = self.generate_features(sentence, i, flist, etype)
                         # savecorpus = True
-                        sentence.tokens[i].features[fname] = tokenfeatures[:]
+                        sentence.tokens[i].features[fname] = tokenfeatures
                         # if tokenlabel != "other":
                         #      logging.debug("%s %s" % (tokenfeatures, tokenlabel))
                         sentencefeatures.append(tokenfeatures)
                         sentencelabels.append(tokenlabel)
                         sentencetokens.append(sentence.tokens[i])
-                        sentencesubtypes.append(tokensubtype)
+                        del tokenfeatures
+                            #sentencesubtypes.append(tokensubtype)
                         # print sentencesubtypes
                 #logging.info("%s" % set(sentencesubtypes))
                 #if subtype == "all" or subtype in sentencesubtypes:
                 #logging.debug(sentencesubtypes)
                 nsentences += 1
-                self.data.append(sentencefeatures)
-                self.labels.append(sentencelabels)
+                self.data.append(tuple(sentencefeatures))
+                self.labels.append(tuple(sentencelabels))
+                del sentencefeatures
+                del sentencelabels
                 self.sids.append(sentence.sid)
-                self.tokens.append(sentencetokens)
-                self.subtypes.append(sentencesubtypes)
-                self.sentences.append(sentence.text)
+                self.tokens.append(tuple(sentencetokens))
+                #if mode != "train":
+
+                    #self.subtypes.append(tuple(sentencesubtypes))
+                    #self.sentences.append(sentence.text)
+            if didx % 1000 == 0:
+                gc.collect()
+            #    tr.print_diff()
+
             didx += 1
         # save data back to corpus to improve performance
         #if subtype == "all" and savecorpus:
         #    corpus.save()
         logging.info("used %s sentences for model %s" % (nsentences, etype))
+        #tr.print_diff()
 
     def copy_data(self, basemodel, t="all"):
         #logging.debug(self.subtypes)
@@ -388,14 +390,14 @@ class SimpleTaggerModel(Model):
                         self.labels[-1].append("other")
                 # print self.labels[-1]
             self.sids = [basemodel.sids[i] for i in range(len(basemodel.subtypes))]
-            self.tokens = [basemodel.tokens[i] for i in range(len(basemodel.subtypes))]
-            self.sentences = [basemodel.sentences[i] for i in range(len(basemodel.subtypes))]
+            self.tokens =  [basemodel.tokens[i] for i in range(len(basemodel.subtypes))]
+            #self.sentences = [basemodel.sentences[i] for i in range(len(basemodel.subtypes))]
         else:
             self.data = basemodel.data[:]
             self.labels = basemodel.labels[:]
             self.sids = basemodel.sids
             self.tokens = basemodel.tokens[:]
-            self.sentences = basemodel.sentences[:]
+            #self.sentences = basemodel.sentences[:]
         logging.info("copied %s for model %s" % (len(self.data), t))
 
     def generate_features(self, sentence, i, flist, etype, subtype="all"):
@@ -424,17 +426,15 @@ class SimpleTaggerModel(Model):
                 fvalue = event_features[f](sentence, i)
             else:
                 fvalue = feature_extractors[f](sentence, i)
-            #sentence.tokens[i].features[f] = fvalue
+            # sentence.tokens[i].features[f] = fvalue
             #else: uncomment if it gets too slow
             #    fvalue = sentence.tokens[i].features[f]
-            #features.append(f + "=" + fvalue)
-            features.append(fvalue)
-            #print f, fvalue
-        #if label != "other":
+            if fvalue != "BOS" and fvalue != "EOS":
+                features.append(f + "=" + fvalue)
+        # if label != "other":
         #     logging.debug("{} {}".format(sentence.tokens[i], label))
         #logging.debug(features)
-        #print
-        #print
+        features = set(features)
         return features, label
 
     def save_corpus_to_sbilou(self):
@@ -486,16 +486,20 @@ def create_entity(tokens, sid, did, text, score, etype, **kwargs):
     elif etype == "mirna":
         e = MirnaEntity(tokens, sid, text=text, did=did, score=score,
                         eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"))
-    elif etype == "protein":
+    elif etype == "protein" or etype == "gene":
         e = ProteinEntity(tokens, sid, text=text, did=did,score=score,
                           eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"))
     elif etype == "dna":
         e = DNAEntity(tokens, sid, text=text, did=did,score=score,
                           eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"))
     elif etype == "event":
-         e = EventEntity(tokens, sid, text=text, did=did,score=score, **kwargs)
+         e = EventEntity(tokens, sid, text=text, did=did,score=score,
+                         eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"),
+                         original_id=kwargs.get("original_id"))
     elif etype in ("timex3", "sectiontime", "doctime"):
-         e = TimeEntity(tokens, sid, text=text, did=did,score=score, **kwargs)
+         e = TimeEntity(tokens, sid, text=text, did=did,score=score,
+                        eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"),
+                        original_id=kwargs.get("original_id"))
     else:
         e = Entity(tokens, sid, text=text, did=did,score=score,
                         eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"),

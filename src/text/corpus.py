@@ -1,8 +1,8 @@
 from __future__ import division, absolute_import
 
-import codecs
+import io
 import logging
-import pickle
+import cPickle as pickle
 import random
 import socket
 import sys
@@ -26,7 +26,6 @@ class Corpus(object):
         self.documents = kwargs.get("documents", {})
         self.invalid_sections = set()
         self.invalid_sids = set()
-        self.name = kwargs.get("corpusname", "default_name")
         #logging.debug("Created corpus with {} documents".format(len(self.documents)))
 
     def progress(self, count, total, suffix=''):
@@ -46,6 +45,12 @@ class Corpus(object):
         #    path = args[0]
         pickle.dump(self, open(savedir, "wb"))
         logging.info("saved corpus to " + savedir)
+
+    def to_tuple(self):
+        for did in self.documents:
+            self.documents[did].sentences = tuple(self.documents[did].sentences)
+            for sentence in self.documents[did].sentences:
+                sentence.tokens = tuple(sentence.tokens)
 
     def get_unique_results(self, source, ths, rules, mode):
         allentitites = {}
@@ -187,6 +192,11 @@ class Corpus(object):
             for sentence in self.documents[d].sentences:
                 if sentence.sid == sid:
                     return sentence
+        print "sentence not found", sid
+        for d in self.documents:
+            for sentence in self.documents[d].sentences:
+                print sentence.sid,
+            print
 
     def load_genia(self):
         os.chdir("bin/geniatagger-3.0.2/")
@@ -330,12 +340,16 @@ class Corpus(object):
             self.convert_to_csv(output_path)
 
     def convert_to_brat(self, output_path):
-        pass
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        for did in self.documents:
+            with io.open("{}/{}.txt".format(output_path, did), "w", encoding='utf-8') as output_file:
+                output_file.write(unicode(self.documents[did].text, "utf-8"))
 
     def convert_to_csv(self, output_path, entities=False, relations=False):
         if not os.path.exists(output_path):
             os.makedirs(output_path)
-        with codecs.open("{}/documents.txt".format(output_path), "w", 'utf-8') as output_file:
+        with io.open("{}/documents.txt".format(output_path), "w", encoding='utf-8') as output_file:
             for did in self.documents:
                 output_file.write(u"{}\t{}\n".format(did, self.documents[did].text.replace("\n", " ")))
 

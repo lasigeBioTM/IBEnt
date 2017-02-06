@@ -1,5 +1,6 @@
+import io
 import logging
-import pickle
+import cPickle as pickle
 import os
 import time
 import argparse
@@ -9,11 +10,10 @@ from sklearn.dummy import DummyClassifier
 from sklearn.externals import joblib
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
-
-
-
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + '../..'))
 from config.corpus_paths import paths
+
+
 from text.corpus import Corpus
 from config import config
 from text.offset import Offset, perfect_overlap, contained_by, Offsets
@@ -24,12 +24,11 @@ END_TAG = "end"
 MIDDLE_TAG = "middle"
 OTHER_TAG = "other"
 
-class SystemResults(object):
-
-    def __init__(self):
-        self.name = None
+class ResultsRE(object):
+    def __init__(self, name):
+        self.pairs = {}
+        self.name = name
         self.corpus = None
-        self.basedir = None
         self.document_pairs = {}
 
     def save(self, path):
@@ -60,12 +59,34 @@ class SystemResults(object):
 
         self.corpus = corpus
 
+    def convert_to(self, output_format, output_path, eset):
+        if output_format == "brat":
+            self.convert_to_brat(output_path, eset)
 
+    def convert_to_brat(self, output_path, eset):
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+        for did in self.corpus.documents:
+            eid_map = {}
+            with io.open("{}/{}.ann".format(output_path, did), "w", encoding='utf-8') as output_file:
+                ecount = 1
+                for sentence in self.corpus.documents[did].sentences:
+                    if eset in sentence.entities.elist:
+                        print "writing...", eset
+                        for entity in sentence.entities.elist[eset]:
+                            eid_map[entity.eid] = "T{0}".format(ecount)
+                            output_file.write(u"T{0}\t{1.type} {1.dstart} {1.dend}\t{1.text}\n".format(ecount, entity))
+                            ecount += 1
+                rcount = 1
+                for p in self.document_pairs[did].pairs:
+                    output_file.write(u"R{0}\tmiRNA-regulation Arg1:{1} Arg2:{2}\n".format(rcount,
+                                                                                           eid_map[p.entities[0].eid],
+                                                                                           eid_map[p.entities[1].eid]))
+                    rcount += 1
 
-class ResultsNER(SystemResults):
+class ResultsNER(object):
     """Store a set of entities related to a corpus or input text """
     def __init__(self, name):
-        super(ResultsNER, self).__init__()
         self.entities = {}
         self.name = name
         self.corpus = Corpus(self.name)
@@ -98,8 +119,34 @@ class ResultsNER(SystemResults):
                 sentence.entities.elist[self.name] = new_entities
         self.corpus = corpus
 
+    def save(self, path):
+        # no need to save the whole corpus, only the entities of each sentence are necessary
+        # because the full corpus is already saved on a diferent pickle
+        logging.info("Saving results to {}".format(path))
+        reduced_corpus = {}
+        for did in self.corpus.documents:
+            reduced_corpus[did] = {}
+            for sentence in self.corpus.documents[did].sentences:
+                reduced_corpus[did][sentence.sid] = sentence.entities
+        self.corpus = reduced_corpus
+        pickle.dump(self, open(path, "wb"))
+    
     def save_chemdner(self):
         pass
+
+    def load_corpus(self, goldstd):
+        logging.info("loading corpus %s" % paths[goldstd]["corpus"])
+        corpus = pickle.load(open(paths[goldstd]["corpus"]))
+        for did in corpus.documents:
+            if did not in self.corpus:
+                logging.info("no results for {}".format(did))
+                continue
+            for sentence in corpus.documents[did].sentences:
+                sentence.entities = self.corpus[did][sentence.sid]
+                #for entity in sentence.entities.elist[options.models]:
+                #    print entity.chebi_score,
+
+        self.corpus = corpus
 
     def combine_results(self, basemodel, name):
         # add another set of anotations to each sentence, ending in combined
@@ -129,13 +176,16 @@ class ResultsNER(SystemResults):
         # merge the results of this set with another set
         dids = set(self.corpus.documents.keys()).union(set(results.corpus.documents.keys()))
         for did in dids:
+            # one result set may contain more or less documents than this one
+            # in that case, simply add the document to the other result set
             if did not in self.corpus.documents:
                 self.corpus.documents[did] = results.corpus.document[did]
             elif did not in results.corpus.documents:
                 results.corpus.documents[did] = self.corpus.documents[did]
-            else:
+            else: # merge entities
                 for sentence in results.corpus.documents[did].sentences:
                     base_sentence = self.corpus.documents[did].get_sentence(sentence.sid)
+                    # add every new model in the new result set to this one
                     for model in sentence.entities.elist:
                         if model != "goldstandard" and model not in base_sentence.entities.elist:
                             base_sentence.entities.elist[model] = sentence.entities.elist[model]
@@ -219,28 +269,41 @@ class ResultsNER(SystemResults):
         #     print train_data[i], l
         return train_data, train_labels, offsets
 
-class ResultsRE(SystemResults):
-    def __init__(self, name):
-        super(ResultsRE, self).__init__()
-        self.pairs = {}
-        self.name = name
-        self.corpus = None
-        self.document_pairs = {}
+    def convert_to(self, output_format, output_path, eset):
+        if output_format == "brat":
+            self.convert_to_brat(output_path, eset)
 
-    def save(self, path):
-        # no need to save the whole corpus, only the entities of each sentence are necessary
-        # because the full corpus is already saved on a diferent pickle
-        logging.info("Saving results to {}".format(path))
-        reduced_corpus = {}
-        npairs = 0
+    def convert_to_brat(self, output_path, eset):
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
         for did in self.corpus.documents:
-            self.document_pairs[did] = self.corpus.documents[did].pairs
-            npairs += len(self.document_pairs[did].pairs)
-            reduced_corpus[did] = {}
-            for sentence in self.corpus.documents[did].sentences:
-                reduced_corpus[did][sentence.sid] = sentence.entities
-        self.corpus = reduced_corpus
-        pickle.dump(self, open(path, "wb"))
+            with io.open("{}/{}.ann".format(output_path, did), "w", encoding='utf-8') as output_file:
+                ecount = 0
+                for sentence in self.corpus.documents[did].sentences:
+                    if eset in sentence.entities.elist:
+                        print "writing...", eset
+                        for entity in sentence.entities.elist[eset]:
+                            output_file.write(u"T{0}\t{1.type} {1.dstart} {1.dend}\t{1.text}\n".format(ecount, entity))
+                            ecount += 1
+
+    def import_chemdner(self, filepath):
+        with io.open(filepath, encoding="utf-8") as inputfile:
+            next(inputfile)
+            for l in inputfile:
+                values = l.split("\t")
+                did = values[0]
+                sectionid = values[1]
+                # print l
+                start, end, text = int(values[2]), int(values[3]), values[5]
+                confidence = values[4]
+                if did in self.corpus.documents:
+                    entity = self.corpus.documents[did].tag_chemdner_entity(start, end, "unknown", source=self.model,
+                                                               text=text, confidence=confidence, doct=sectionid, score=1)
+                    if entity:
+                        self.entities[entity.eid] = entity
+        #for d in self.corpus.documents:
+        #    for s in self.corpus.documents[d].sentences:
+        #        print s.entities.elist.keys()
 
 
 class ResultSetNER(object):
@@ -293,33 +356,6 @@ def combine_results(modelname, results, resultsname, etype, models):
                                         ref_sentence.entities.elist[modelname].append(e)
     return all_results
 
-def combine_results_reduced_corpus(modelname, results, resultsname, etype, models):
-    all_results = ResultsNER(resultsname)
-    all_results.corpus = results[0].corpus
-    for r in results:
-        print r.path
-        for did in r.corpus:
-            all_results.document_pairs[did] = []
-            for sid in r.corpus[did]:
-                if modelname not in all_results.corpus[did][sid].elist:
-                        all_results.corpus[did][sid].elist[modelname] = []
-                offsets = Offsets()
-                sentence_entities = r.corpus[did][sid]
-                for s in sentence_entities.elist:
-                    # print s
-                    if s in models:
-                        for e in sentence_entities.elist[s]:
-                                if e.type == etype:
-                                    eid_offset = Offset(e.dstart, e.dend, text=e.text, sid=e.sid)
-                                    exclude = [perfect_overlap]
-                                    toadd, v, overlapping, to_exclude = offsets.add_offset(eid_offset, exclude_this_if=exclude, exclude_others_if=[])
-                                    if toadd:
-                                        # print "added:", r.path, s, e.text
-                                        all_results.corpus[did][sid].elist[modelname].append(e)
-    return all_results
-
-
-
 def main():
     start_time = time.time()
     parser = argparse.ArgumentParser(description='')
@@ -341,6 +377,7 @@ def main():
     parser.add_argument("--doctype", dest="doctype", help="type of document to be considered", default="all")
     parser.add_argument("--entitytype", dest="etype", help="type of entities to be considered", default="all")
     parser.add_argument("--external", action="store_true", default=False, help="Run external evaluation script, depends on corpus type")
+    parser.add_argument("-i", "--input", action="store", help="input file to be convert to IBEnt results.")
     options = parser.parse_args()
 
     numeric_level = getattr(logging, options.loglevel.upper(), None)
@@ -358,7 +395,7 @@ def main():
         if os.path.exists(r + ".pickle"):
             results = pickle.load(open(r + ".pickle", 'rb'))
             results.path = r
-            #results.load_corpus(options.goldstd)
+            results.load_corpus(options.goldstd)
             results_list.append(results)
         else:
             print "results not found"
@@ -369,9 +406,19 @@ def main():
         logging.info("combining results...")
         #new_name = "_".join([m.split("/")[-1] for m in options.results])
         #print new_name
-        results = combine_results_reduced_corpus(options.finalmodel, results_list, options.output, options.etype, options.models)
-        #results.save(options.output + ".pickle")
-        pickle.dump(results, open(options.output + ".pickle", "wb"))
+        results = combine_results(options.finalmodel, results_list, options.output, options.etype, options.models)
+        results.save(options.output + ".pickle")
+    if options.action == "import":
+        # import results from a different format to IBEnt
+        # for now assume CHEMDNER format
+        results = ResultsNER(options.results[0])
+        logging.info("loading corpus...")
+        results.corpus = pickle.load(open(paths[options.goldstd]["corpus"]))
+        results.model = options.models[0]
+        results.import_chemdner(options.input)
+        results.save(results.name + ".pickle")
+
+
 
     """elif options.action in ("train_ensemble", "test_ensemble"):
         if "annotations" in config.paths[options.goldstd]:
@@ -414,3 +461,4 @@ def main():
     logging.info("Total time: %ss" % total_time)
 if __name__ == "__main__":
     main()
+>>>>>>> master

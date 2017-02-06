@@ -22,7 +22,8 @@ from config.corpus_paths import paths
 from config import config
 from reader.Transmir_corpus import get_transmir_gold_ann_set
 from reader.bc2gm_corpus import get_b2gm_gold_ann_set
-from reader.chemdner_corpus import get_chemdner_gold_ann_set, run_chemdner_evaluation
+from reader.brat_corpus import get_brat_gold_ann_set
+from reader.chemdner_corpus import get_chemdner_gold_ann_set, run_chemdner_evaluation, write_chemdner_files
 from reader.genia_corpus import get_genia_gold_ann_set
 from reader.jnlpba_corpus import get_jnlpba_gold_ann_set
 from reader.mirna_corpus import get_ddi_mirna_gold_ann_set
@@ -57,6 +58,8 @@ def get_gold_ann_set(corpus_type, gold_path, entity_type, pair_type, text_path):
         goldset = get_b2gm_gold_ann_set(gold_path, text_path)
     elif corpus_type == "transmir":
         goldset = get_transmir_gold_ann_set(gold_path, entity_type)
+    elif corpus_type == "brat":
+        goldset = get_brat_gold_ann_set(gold_path, entity_type, pair_type)
     return goldset
 
 
@@ -92,6 +95,7 @@ def compare_results(offsets, goldoffsets, corpus, getwords=True, evaltype="entit
         for k in goldoffsets_keys:
             if k[0] not in entities or k[1] not in entities[k[0]] or k[2] not in entities[k[0]]:
                 del goldoffsets[k]
+                print "excluded ", k
     tps = set(offsets.keys()) & set(goldoffsets.keys())
     fps = set(offsets.keys()) - set(goldoffsets.keys())
     fns = set(goldoffsets.keys()) - set(offsets.keys())
@@ -178,10 +182,9 @@ def get_list_results(results, models, goldset, ths, rules, mode="ner"):
     :param ths: Validation thresholds
     :param rules: Validation rules
     """
-
-    print "saving results to {}".format(results.path + "_final.tsv")
     sysresults = results.corpus.get_unique_results(models, ths, rules, mode)
     print "{} unique entries".format(len(sysresults))
+    print "saving results to {}".format(results.path + "_final.tsv")
     with codecs.open(results.path + "_final.tsv", 'w', 'utf-8') as outfile:
         outfile.write('\n'.join(['\t'.join(x) for x in sysresults]))
     print "getting corpus entities..."
@@ -193,7 +196,7 @@ def get_list_results(results, models, goldset, ths, rules, mode="ner"):
                 for e in sentence.entities.elist[s]:
                     entities[did].add(e.normalized)
     if goldset:
-        #lineset = set([(l[0], l[1].lower(), l[2].lower()) for l in sysresults])
+        #lineset = set([(l[0], "0", "0", sysresults[l][-1]) for l in sysresults])
         #goldset = set([(g[0], g[1].lower(), g[2].lower()) for g in goldset])
         reportlines, tps, fps, fns = compare_results(sysresults, goldset, results.corpus, getwords=True, entities=entities)
         with codecs.open(results.path + "_report.txt", 'w', "utf-8") as reportfile:
@@ -440,11 +443,11 @@ def main():
                     get_relations_results(result, options.models, goldset[1], ths, options.rules)
                 else: # evaluate an entity type
                     get_results(result, options.models, goldset[0], ths, options.rules)
-            #if options.bceval:
-            #    write_chemdner_files(results, options.models, goldset, ths, options.rules)
-            #    evaluation = run_chemdner_evaluation(config.paths[options.goldstd]["cem"],
-            #                                         options.results + ".tsv")
-            #    print evaluation
+            if options.external:
+                write_chemdner_files(results, options.models, goldset, ths, options.rules)
+                #evaluation = run_chemdner_evaluation(paths[options.goldstd]["cem"],
+                #                                     options.results[0] + ".tsv")
+                #print evaluation
         elif options.action == "evaluate_list": # ignore the spans, the gold standard is a list of unique entities
             for result in results_list:
                 if options.ptype:

@@ -13,14 +13,14 @@ class CrfSuiteModel(SimpleTaggerModel):
 
     def train(self):
         logging.info("Training model with CRFsuite")
-        self.trainer = pycrfsuite.Trainer(verbose=False)
+        self.trainer = pycrfsuite.Trainer(verbose=False, algorithm="lbfgs")
         for xseq, yseq in zip(self.data, self.labels):
             self.trainer.append(xseq, yseq)
         self.trainer.set_params({
-            'c1': 1.0,   # coefficient for L1 penalty
-             # 'c2': 1e-3,  # coefficient for L2 penalty
-            # 'c2': 2,
-            'max_iterations': 500,  # stop earlier
+            #'c1': 0.0,   # coefficient for L1 penalty
+             #'c2': 1e-3,  # coefficient for L2 penalty
+             #'c2': 2,
+            'max_iterations': 1000,  # stop earlier
 
             # include transitions that are possible, but not observed
             'feature.possible_transitions': True
@@ -86,19 +86,21 @@ class CrfSuiteModel(SimpleTaggerModel):
                                       sid=sentence.sid, did=sentence.did,
                                       text=token.text, score=self.scores[isent][it], etype=self.etype)
                 eid = sentence.tag_entity(start=token.start, end=token.end, etype=self.etype,
-                                            entity=single_entity, source=self.path)
+                                            entity=single_entity, source=self.path, subtype=self.subtype)
                 single_entity.eid = eid
                 results.entities[eid] = single_entity # deepcopy
             elif t == "start":
                 new_entity = create_entity(tokens=[token],
                                                    sid=sentence.sid, did=sentence.did,
-                                                   text=token.text, score=self.scores[isent][it], etype=self.etype)
+                                                   text=token.text, score=self.scores[isent][it],
+                                                   etype=self.etype, subtype=self.subtype)
             elif t == "middle":
                 if not new_entity:
                     logging.info("starting with inside...")
                     new_entity = create_entity(tokens=[token],
                                                    sid=sentence.sid, did=sentence.did,
-                                                   text=token.text, score=self.scores[isent][it], etype=self.etype)
+                                                   text=token.text, score=self.scores[isent][it],
+                                                   etype=self.etype, subtype=self.subtype)
                 else:
                     new_entity.tokens.append(token)
                     new_entity.score += self.scores[isent][it]
@@ -107,7 +109,8 @@ class CrfSuiteModel(SimpleTaggerModel):
                     new_entity = create_entity(tokens=[token],
                                                sid=sentence.sid, did=sentence.did,
                                                text=token.text,
-                                               score=self.scores[isent][it], etype=self.etype)
+                                               score=self.scores[isent][it],
+                                               etype=self.etype, subtype=self.subtype)
                     logging.debug("started from a end: {0}".format(new_entity))
                 else:
                     new_entity.tokens.append(token)
@@ -119,7 +122,7 @@ class CrfSuiteModel(SimpleTaggerModel):
                 #logging.info("%s end: %s" % (new_entity.sid, str(new_entity)))
                 #logging.debug("found the end: %s", ''.join([t.text for t in new_entity.tokens]))
                 eid = sentence.tag_entity(new_entity.tokens[0].start, new_entity.tokens[-1].end, self.etype,
-                                          entity=new_entity, source=self.path)
+                                          entity=new_entity, source=self.path, subtype=self.subtype)
                 new_entity.eid = eid
                 results.entities[eid] = new_entity # deepcopy
                 new_entity = None

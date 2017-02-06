@@ -6,6 +6,24 @@ transmir_base = "corpora/transmir/"
 paths = {}
 
 paths.update({
+    'braincancer_train':{
+        'text': "corpora/thymedata-1.1.0/text/train_brain/",
+        'annotations': "corpora/thymedata-1.1.0/braincancer/train/",
+        'format': "tempeval",
+        'corpus': "data/braincancer_train.pickle"
+        },
+    'braincancer_test':{
+        'text': "corpora/thymedata-1.1.0/text/test_brain/",
+        'annotations': "",
+        'format': "tempeval",
+        'corpus': "data/braincancer_test.pickle"
+        },
+    'sharecorpus':{
+        'text': "corpora/sharecorpus/",
+        'annotations': 'corpora/sharecorpus/',
+        'corpus': "data/sharecorpus.pickle",
+        'format': 'mirtex'
+    },
     'coloncancer_train':{
         'text': "corpora/thymedata-1.1.0/text/Train/",
         'annotations': "corpora/thymedata-1.1.0/coloncancer/Train/",

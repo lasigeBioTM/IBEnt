@@ -134,6 +134,7 @@ def get_report(results, corpus, more_info, getwords=True):
         :return: Lines to write to a report file, word that appear in this set
     """
     # TODO: use only offset tuples (did, start, end, text)
+    # logging.debug(more_info)
     report = {}
     words = []
     for t in results:
@@ -159,7 +160,7 @@ def get_report(results, corpus, more_info, getwords=True):
             report[did] = []
         if getwords:
             # line = u"{}\t{}:{}\t{}\t{}".format(did, start, end, tokentext.encode('utf-8'), "\t".join(more_info[t]))
-            line = u"{}\t{}:{}\t{}".format(did, start, end, tokentext)
+            line = u"{}\t{}:{}\t{}\t{}".format(did, start, end, tokentext, "\t".join([str(s) for s in more_info[t]]))
         else:
             line = did + '\t' + start + ":" + end
         report[did].append(line)
@@ -230,7 +231,8 @@ def get_relations_results(results, model, gold_pairs, ths, rules, compare_text=T
                 if val:
                     ptrue += 1
                     pair = (did, (p.entities[0].dstart, p.entities[0].dend), (p.entities[1].dstart, p.entities[1].dend),
-                              u"{}={}>{}".format(p.entities[0].text, p.relation, p.entities[1].text))
+                              #"u"{}={}>{}".format(p.entities[0].text, p.relation, p.entities[1].text))
+                              "")
                     #system_pairs.append(pair)
                     between_text = results.corpus.documents[p.entities[0].did].text[p.entities[0].dend:p.entities[1].dstart]
                     system_pairs[pair] = [u"{}=>{}".format(p.entities[0].type, p.entities[1].type), between_text]
@@ -258,11 +260,12 @@ def get_relations_results(results, model, gold_pairs, ths, rules, compare_text=T
     print "Fmeasure: {:.3f}".format(fmeasure)
     return precision, recall
 
-def run_anafora(results, models, annotations_path, text_path, ths, rules):
+def run_anafora(results, models, annotations_path, text_path, ths, rules, etype=""):
     if not os.path.exists(results.path + "/files/"):
         os.makedirs(results.path + "/files/")
+    print "writing thyme results to ", results.path + "/files/"
     write_tempeval_results(results, models, ths, rules)
-    r = run_anafora_evaluation(annotations_path, results.path, doctype="all")
+    r = run_anafora_evaluation(annotations_path, results.path, doctype="all", etype=etype)
     print r
 
 def get_results(results, models, gold_offsets, ths, rules, compare_text=True):
@@ -274,15 +277,16 @@ def get_results(results, models, gold_offsets, ths, rules, compare_text=True):
     :param ths: Validation thresholds
     :param rules: Validation rules
     """
+    logging.info("getting results...")
     offsets = results.corpus.get_entity_offsets(models, ths, rules)
-    # logging.debug(offsets)
+    logging.info("done")
     for o in offsets:
         if o[0] not in results.corpus.documents:
             print "DID not found! {}".format(o[0])
             sys.exit()
-    if not compare_text: #e.g. gold standard does not include the original text
-        offsets = [(o[0], o[1], o[2], "") for o in offsets]
-    # logging.info("system entities: {}; gold entities: {}".format(offsets, gold_offsets))
+    #if not compare_text: #e.g. gold standard does not include the original text
+    #    offsets = [(o[0], o[1], o[2], "") for o in offsets]
+    #logging.info("system entities: {}; gold entities: {}".format(offsets, gold_offsets))
     reportlines, tps, fps, fns = compare_results(offsets, gold_offsets, results.corpus, getwords=compare_text)
     with codecs.open(results.path + "_report.txt", 'w', "utf-8") as reportfile:
         print "writing report to {}_report.txt".format(results.path)
@@ -418,12 +422,12 @@ def main():
                             counts[e.type] += 1
             print counts
             sys.exit()
-        if "annotations" in paths[options.goldstd]:
+        if paths[options.goldstd].get("annotations"):
             logging.info("loading gold standard %s" % paths[options.goldstd]["annotations"])
             goldset = get_gold_ann_set(paths[options.goldstd]["format"], paths[options.goldstd]["annotations"],
                                        options.etype, options.ptype, paths[options.goldstd]["text"])
         else:
-            goldset = None
+            goldset = ({}, {})
         logging.info("using thresholds: chebi > {!s} ssm > {!s}".format(options.chebi, options.ssm))
         #results.load_corpus(options.goldstd)
         #results.path = options.results
@@ -449,7 +453,8 @@ def main():
                     get_list_results(result, options.models, goldset[0], ths, options.rules)
     elif options.action == "anafora":
         for result in results_list:
-            run_anafora(result, options.models, paths[options.goldstd]["annotations"], paths[options.goldstd]["text"], {}, options.rules)
+            run_anafora(result, options.models, paths[options.goldstd]["annotations"], paths[options.goldstd]["text"], {},
+                        options.rules, options.etype)
     total_time = time.time() - start_time
     logging.info("Total time: %ss" % total_time)
 if __name__ == "__main__":

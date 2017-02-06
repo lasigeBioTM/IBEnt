@@ -268,7 +268,7 @@ class Document(object):
         offsets = []
         for s in self.sentences:
             if s.entities:
-                offsets += s.entities.get_entity_offsets(esource, ths, rules)
+                offsets += s.entities.get_entity_offsets(esource, ths, rules, s.tokens)
         return offsets
 
     def get_entity(self, eid, source="goldstandard"):

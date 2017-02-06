@@ -1,6 +1,13 @@
 import codecs
 import logging
 import unicodedata
+from subprocess import Popen, PIPE
+import sys
+import os
+import atexit
+import time
+import cPickle as pickle
+sys.path.append(os.path.abspath(os.path.dirname(__file__) + '../../..'))
 from classification.model import Model
 from text.chemical_entity import element_base, ChemicalEntity
 from text.chemical_entity import amino_acids
@@ -9,34 +16,46 @@ from text.entity import Entity
 from text.mirna_entity import MirnaEntity
 from text.protein_entity import ProteinEntity
 from text.time_entity import TimeEntity
-from text.event_entity import EventEntity
+from text.event_entity import EventEntity, umls_dic, ldpmap, call_ldpmap
 
 feature_extractors = {# "text": lambda x, i: x.tokens[i].text,
-                      "prefix3": lambda x, i: x.tokens[i].text[:3],
-                      "prevprefix3": lambda x, i: prev_prefix(x, i, 3),
-                      "nextprefix3": lambda x, i: next_prefix(x, i, 3),
-                      "suffix3": lambda x, i: x.tokens[i].text[-3:],
-                      "prevsuffix3": lambda x, i: prev_suffix(x, i, 3),
-                      "nextsuffix3": lambda x, i: next_suffix(x, i, 3),
-                      "prefix2": lambda x, i: x.tokens[i].text[:2],
-                      "suffix2": lambda x, i: x.tokens[i].text[-2:],
-                      "prefix4": lambda x, i: x.tokens[i].text[:4],
-                      "suffix4": lambda x, i: x.tokens[i].text[-4:],
-                      "hasnumber": lambda x, i: str(any(c.isdigit() for c in x.tokens[i].text)),
-                      "case": lambda x, i: word_case(x.tokens[i].text),
-                      "prevcase": lambda x, i: prev_case(x, i),
-                      "nextcase": lambda x, i: next_case(x, i),
-                      "lemma": lambda x, i: x.tokens[i].lemma,
-                      "prevlemma": lambda x, i: prev_lemma(x,i),
-                      "nextlemma": lambda x, i: next_lemma(x,i),
+                      "prefix3": lambda x, i: prefix(x, i, 3, 0),
+                      "prevprefix3": lambda x, i: prefix(x, i, 3, -1),
+                      "nextprefix3": lambda x, i: prefix(x, i, 3, 1),
+                      "suffix3": lambda x, i: suffix(x, i, 3, 0),
+                      "prevsuffix3": lambda x, i: suffix(x, i, 3, -1),
+                      "nextsuffix3": lambda x, i: suffix(x, i, 3, 1),
+                      "prefix2": lambda x, i: prefix(x, i, 2, 0),
+                      "suffix2": lambda x, i: suffix(x, i, 2, 0),
+                      "prefix4": lambda x, i: prefix(x, i, 4, 0),
+                      "suffix4": lambda x, i: suffix(x, i, 4, 0),
+                      "prefix2": lambda x, i: prefix(x, i, 2, -1),
+                      "suffix2": lambda x, i: suffix(x, i, 2, -1),
+                      "prefix4": lambda x, i: prefix(x, i, 4, -1),
+                      "suffix4": lambda x, i: suffix(x, i, 4, -1),
+                      "prefix2": lambda x, i: prefix(x, i, 2, 1),
+                      "suffix2": lambda x, i: suffix(x, i, 2, 1),
+                      "prefix4": lambda x, i: prefix(x, i, 4, 1),
+                      "suffix4": lambda x, i: suffix(x, i, 4, 1),
+                      "hasnumber": lambda x, i: "HASNUMBER=" + str(any(c.isdigit() for c in x.tokens[i].text)),
+                      "case": lambda x, i: get_case(x, i, 0),
+                      "prevcase": lambda x, i: get_case(x, i, -1),
+                      "nextcase": lambda x, i: get_case(x, i, 1),
+                      "lemma": lambda x, i: get_lemma(x, i, 0),
+                      "prevlemma": lambda x, i: get_lemma(x, i, -1),
+                      "nextlemma": lambda x, i: get_lemma(x, i, 1),
                       #"postag": lambda x, i: x.tokens[i].genia_pos,
-                      "postag": lambda x, i: x.tokens[i].pos,
-                      "prevpostag": lambda x, i: prev_pos(x,i),
-                      "nextpostag": lambda x, i: next_pos(x,i),
+                      "postag": lambda x, i: get_pos(x, i,0),
+                      "prevpostag": lambda x, i: get_pos(x, i,-1),
+                      "nextpostag": lambda x, i: get_pos(x, i, 1),
                       "wordclass": lambda x, i: wordclass(x.tokens[i].text),
-                      "prevwordclass": lambda x, i: prev_wordclass(x, i),
-                      "nextwordclass": lambda x, i: next_wordclass(x, i),
-                      "simplewordclass": lambda x, i: simplewordclass(x.tokens[i].text)
+                      "prevwordclass": lambda x, i: get_wordclass(x, i, -1),
+                      "nextwordclass": lambda x, i: get_wordclass(x, i, 1),
+                      "simplewordclass": lambda x, i: simplewordclass(x.tokens[i].text),
+                      #"prevcase2": lambda x, i: get_case(x, i, -2),
+                      #"nextcase2": lambda x, i: get_case(x, i, 2),
+                      #"prevcase2": lambda x, i: get_case(x, i, -2),
+                      #"nextcase2": lambda x, i: get_case(x, i, 2),
                       }
 
 chem_features = feature_extractors.copy()
@@ -53,6 +72,65 @@ mirna_features = feature_extractors.copy()
 mirna_features.update({"mir": lambda x, i: mirna(x, i),
                        # "prev_mir": lambda x, i: x.tokens[i-1].text.lower().startswith("mir"),
                        })
+
+time_features = feature_extractors.copy()
+time_features.update({"nertag": lambda x, i: timex_tag(x, i, 0),
+                      "nertag-1": lambda x, i: timex_tag(x, i, -1),
+                      "nertag1": lambda x, i: timex_tag(x, i, 1),
+                      #"prevpostag2": lambda x, i: get_pos(x, i, -2),
+                      #"nextpostag2": lambda x, i: get_pos(x, i, 2),
+                      #"prevlemma2": lambda x, i: get_lemma(x, i, -2),
+                      #"nextlemma2": lambda x, i: get_lemma(x, i, 2),
+                      })
+
+event_features = feature_extractors.copy()
+event_features.update({"prevpostag2": lambda x, i: get_pos(x, i, -2),
+                      "nextpostag2": lambda x, i: get_pos(x, i, 2),
+                      "prevlemma2": lambda x, i: get_lemma(x, i, -2),
+                      "nextlemma2": lambda x, i: get_lemma(x, i, 2),
+                      "umlsname": lambda x, i: get_umls(x, i, 0),
+                      "umlsname-1": lambda x, i: get_umls(x, i, -1),
+                      "umlsname+1": lambda x, i: get_umls(x, i, 1),
+                      #"umlsscore": lambda x, i: str(get_umls(x, i, 0)[1])
+                      #"text": lambda x, i: get_text(x, i, 0),
+                      #"text-1": lambda x, i: get_text(x, i, -1),
+                      #"text1": lambda x, i: get_text(x, i, 1),
+                      })
+
+
+
+
+#print call_ldpmap("bleeding")
+
+
+def get_umls(sentence, i, n=0):
+    global umls_dic
+    if i + n >= len(sentence.tokens):
+        return "EOS"
+    elif i + n < 0:
+        return "BOS"
+    elif sentence.tokens[i + n].text in umls_dic:
+        match = umls_dic[sentence.tokens[i + n].text]
+    else:
+        match = call_ldpmap(sentence.tokens[i + n].text)
+        umls_dic[sentence.tokens[i + n].text] = match
+    if match[1] > 0.8:
+        return "UMLS{}-{}".format(n, match[0])
+    else:
+        return "UMLS{}-NOMATCH".format(n)
+
+
+def timex_tag(sentence, i, n=0):
+    if i + n >= len(sentence.tokens):
+        return "EOS"
+    elif i + n < 0:
+        return "BOS"
+    elif sentence.tokens[i + n].tag in ("DATE", "TIME", "DURATION", "SET"):
+        # print sentence.tokens[i + n].text, sentence.tokens[i + n].tag
+        return "SNER{}={}".format(n, sentence.tokens[i + n].tag)
+    else:
+        return "SNER{}=0".format(n)
+
 
 def genia_chunk(sentence, i):
     if hasattr(sentence[i], "genia_chunk"):
@@ -81,79 +159,58 @@ def word_in_dictionary(word, dictionary):
     # TODO:
     pass
 
-def prev_wordclass(sentence, i):
-    if i == 0:
+#def prev_wordclass(sentence, i, n=1):
+    #if i - n < 0:
+        #return "BOS"
+    #else:
+        #return wordclass(sentence.tokens[i-n].text)
+
+#def next_wordclass(sentence, i, n=1):
+    #if i + n >= len(sentence.tokens):
+        #return "EOS"
+    #else:
+        #return wordclass(sentence.tokens[i+n].text)
+
+def get_wordclass(sentence, i, n):
+    if i + n >= len(sentence.tokens):
+        return "EOS"
+    elif i + n < 0:
         return "BOS"
     else:
-        return wordclass(sentence.tokens[i-1].text)
+        return "WORDCLASS{}={}".format(n, wordclass(sentence.tokens[i+n].text))
 
-def next_wordclass(sentence, i):
-    if i == len(sentence.tokens) - 1:
+def get_text(sentence, i, n=1):
+    if i + n < 0:
+        return "BOS"
+    elif i + n >= len(sentence.tokens):
         return "EOS"
     else:
-        return wordclass(sentence.tokens[i+1].text)
+        return u"TEXT{}={}".format(n, sentence.tokens[i+n].text)
 
-def prev_suffix(sentence, i, size):
-    if i == 0:
+def get_case(sentence, i, n=1):
+    if i + n < 0:
         return "BOS"
-    else:
-        return sentence.tokens[i-1].text[-size:]
-
-def next_suffix(sentence, i, size):
-    if i == len(sentence.tokens) - 1:
+    elif i + n >= len(sentence.tokens):
         return "EOS"
     else:
-        return sentence.tokens[i+1].text[-size:]
+        return "CASE{}={}".format(n, word_case(sentence.tokens[i+n].text))
 
-def prev_prefix(sentence, i, size):
-    if i == 0:
+def get_lemma(sentence, i, n=1):
+    if i + n < 0:
         return "BOS"
-    else:
-        return sentence.tokens[i-1].text[:size]
-
-def next_prefix(sentence, i, size):
-    if i == len(sentence.tokens) - 1:
+    elif i + n >= len(sentence.tokens):
         return "EOS"
     else:
-        return sentence.tokens[i+1].text[:size]
+        return u"LEMMA{}={}".format(n, sentence.tokens[i+n].lemma)
 
-def prev_case(sentence, i):
-    if i == 0:
+def get_pos(sentence, i, n=1):
+    if i + n < 0:
         return "BOS"
-    else:
-        return word_case(sentence.tokens[i-1].text)
-
-def next_case(sentence, i):
-    if i == len(sentence.tokens) - 1:
-        return "EOS"
-    else:
-        return word_case(sentence.tokens[i+1].text)
-
-def prev_lemma(sentence, i):
-    if i == 0:
-        return "BOS"
-    else:
-        return sentence.tokens[i-1].lemma
-
-def next_lemma(sentence, i):
-    if i == len(sentence.tokens) - 1:
-        return "EOS"
-    else:
-        return sentence.tokens[i+1].lemma
-
-def prev_pos(sentence, i):
-    if i == 0:
-        return "BOS"
-    else:
-        # return sentence.tokens[i-1].genia_pos
-        return sentence.tokens[i - 1].pos
-
-def next_pos(sentence, i):
-    if i == len(sentence.tokens) - 1:
+    elif i + n >= len(sentence.tokens):
         return "EOS"
     else:
         # return sentence.tokens[i+1].genia_pos
-        return sentence.tokens[i + 1].pos
+        return "POS{}={}".format(n, sentence.tokens[i + n].pos)
 
 def word_case(word):
     if word.islower():
@@ -179,17 +236,21 @@ def has_greek_symbol(word):
     return False
 
 
-def get_prefix_suffix(word, n):
-    #print len(word.decode('utf-8'))
-    #if len(word.decode('utf-8')) <= n:
-    if len(word) <= n:
-        #print "111111"
-        #word2 = word.encode('utf-8')
-        return word, word
+def prefix(sentence, i , size, n):
+    if i + n < 0:
+        return "BOS"
+    elif i + n >= len(sentence.tokens):
+        return "EOS"
     else:
-        #print "22222"
-        #return word.decode('utf-8')[:n].encode('utf-8'), word.decode('utf-8')[-n:].encode('utf-8')
-        return word[:n], word[-n:]
+        return u"PREFIX{}={}".format(n, sentence.tokens[i+n].text[:size])
+
+def suffix(sentence, i , size, n):
+    if i + n < 0:
+        return "BOS"
+    elif i + n >= len(sentence.tokens):
+        return "EOS"
+    else:
+        return u"SUFFIX{}={}".format(n, sentence.tokens[i+n].text[-size:])
 
 
 def wordclass(word):
@@ -217,7 +278,7 @@ def simplewordclass(word):
             wclass += 'A'
         elif not c.isdigit() and not c.islower() and not c.isupper() and wclass[-1] != 'x':
             wclass += 'x'
-    return wclass[1:]
+    return "SIMPLEWORDCLASS=" + wclass[1:]
 
 
 class SimpleTaggerModel(Model):
@@ -234,8 +295,9 @@ class SimpleTaggerModel(Model):
         self.trainer = None
         self.sentences = []
         self.etype = etype
+        self.subtype = kwargs.get("subtype", "all")
 
-    def load_data(self, corpus, flist, etype="all", mode="train", doctype="all"):
+    def load_data(self, corpus, flist, etype="all", mode="train", doctype="all", subtype="all"):
         """
             Load the data from the corpus to the format required by crfsuite.
             Generate the following variables:
@@ -255,14 +317,16 @@ class SimpleTaggerModel(Model):
             # logging.debug("processing doc %s/%s" % (didx, len(corpus.documents)))
             for si, sentence in enumerate(corpus.documents[did].sentences):
                 # skip if no entities in this sentence
-                if sentence.sid in corpus.documents[did].invalid_sids:
-                    logging.debug("Invalid sentence: {} - {}".format(sentence.sid, sentence.text))
-                    continue
+                #if sentence.sid in corpus.documents[did].invalid_sids:
+                #    logging.debug("Invalid sentence: {} - {}".format(sentence.sid, sentence.text))
+                #    continue
                 #if sentence.sid in corpus.documents[did].title_sids:
                 #    logging.debug("Title sentence: {} - {}".format(sentence.sid, sentence.text))
                 #    continue
                 if mode == "train" and "goldstandard" not in sentence.entities.elist:
                     # logging.debug("Skipped sentence without entities: {}".format(sentence.sid))
+                    continue
+                if "section id" in sentence.text:
                     continue
                 sentencefeatures = []
                 sentencelabels = []
@@ -279,7 +343,7 @@ class SimpleTaggerModel(Model):
                         #     else:
                         #         tokenlabel = sentence.tokens[i].tags.get("goldstandard_" + type, "other")
                         # else:
-                        tokenfeatures, tokenlabel = self.generate_features(sentence, i, flist, etype)
+                        tokenfeatures, tokenlabel = self.generate_features(sentence, i, flist, etype, subtype=subtype)
                         # savecorpus = True
                         sentence.tokens[i].features[fname] = tokenfeatures[:]
                         # if tokenlabel != "other":
@@ -324,7 +388,7 @@ class SimpleTaggerModel(Model):
                         self.labels[-1].append("other")
                 # print self.labels[-1]
             self.sids = [basemodel.sids[i] for i in range(len(basemodel.subtypes))]
-            self.tokens =  [basemodel.tokens[i] for i in range(len(basemodel.subtypes))]
+            self.tokens = [basemodel.tokens[i] for i in range(len(basemodel.subtypes))]
             self.sentences = [basemodel.sentences[i] for i in range(len(basemodel.subtypes))]
         else:
             self.data = basemodel.data[:]
@@ -334,32 +398,43 @@ class SimpleTaggerModel(Model):
             self.sentences = basemodel.sentences[:]
         logging.info("copied %s for model %s" % (len(self.data), t))
 
-    def generate_features(self, sentence, i, flist, subtype):
+    def generate_features(self, sentence, i, flist, etype, subtype="all"):
         """
             Features is dictionary mapping of featurename:value.
             Label is the correct label of the token. It is always other if
             the text is not annotated.
         """
-        if subtype == "all":
+        if etype == "all":
             label = sentence.tokens[i].tags.get("goldstandard", "other")
         else:
-            label = sentence.tokens[i].tags.get("goldstandard_" + subtype, "other")
+            if subtype == "all":
+                label = sentence.tokens[i].tags.get("goldstandard_" + etype, "other")
+            else:
+                label = sentence.tokens[i].tags.get("goldstandard_" + etype + "-" + subtype, "other")
         features = []
         for f in flist:
             #if f not in sentence.tokens[i].features:
-            if subtype == "protein":
+            if etype == "protein":
                 fvalue = prot_features[f](sentence, i)
-            elif subtype == "mirna":
+            elif etype == "mirna":
                 fvalue = mirna_features[f](sentence, i)
+            elif etype.startswith("time"):
+                fvalue = time_features[f](sentence, i)
+            elif etype.startswith("event"):
+                fvalue = event_features[f](sentence, i)
             else:
                 fvalue = feature_extractors[f](sentence, i)
-            sentence.tokens[i].features[f] = fvalue
+            #sentence.tokens[i].features[f] = fvalue
             #else: uncomment if it gets too slow
             #    fvalue = sentence.tokens[i].features[f]
-            features.append(f + "=" + fvalue)
-        # if label != "other":
+            #features.append(f + "=" + fvalue)
+            features.append(fvalue)
+            #print f, fvalue
+        #if label != "other":
         #     logging.debug("{} {}".format(sentence.tokens[i], label))
         #logging.debug(features)
+        #print
+        #print
         return features, label
 
     def save_corpus_to_sbilou(self):
@@ -418,13 +493,9 @@ def create_entity(tokens, sid, did, text, score, etype, **kwargs):
         e = DNAEntity(tokens, sid, text=text, did=did,score=score,
                           eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"))
     elif etype == "event":
-         e = EventEntity(tokens, sid, text=text, did=did,score=score,
-                         eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"),
-                         original_id=kwargs.get("original_id"))
+         e = EventEntity(tokens, sid, text=text, did=did,score=score, **kwargs)
     elif etype in ("timex3", "sectiontime", "doctime"):
-         e = TimeEntity(tokens, sid, text=text, did=did,score=score,
-                        eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"),
-                        original_id=kwargs.get("original_id"))
+         e = TimeEntity(tokens, sid, text=text, did=did,score=score, **kwargs)
     else:
         e = Entity(tokens, sid, text=text, did=did,score=score,
                         eid=kwargs.get("eid"), subtype=kwargs.get("subtype"), nextword=kwargs.get("nextword"),

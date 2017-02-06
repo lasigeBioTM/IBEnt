@@ -58,9 +58,16 @@ if use_go:
                               db=go_db)
 
 relation_types = {"miRNA-gene":
-        {"source_role": "agent",
-         "source_types": ("mirna"),
-         "target_role": "target",
-         "target_types": ("protein"),
-         "event": "interaction",
-         "keywords": ["bind", "ligand", "interact"]},}
+                    {"source_role": "agent",
+                     "source_types": ("mirna"),
+                     "target_role": "target",
+                     "target_types": ("protein"),
+                     "event": "interaction",
+                     "keywords": ["bind", "ligand", "interact"]},
+                 "temporal":
+                     {"source_role": "agent",
+                     "source_types": ("event"),
+                     "target_role": "target",
+                     "target_types": ("event"),
+                     "event": "temporal",
+                     "keywords": []}}

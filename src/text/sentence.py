@@ -66,15 +66,14 @@ class Sentence(object):
         self.parsetree = sentence.get('parse')
         self.depparse = sentence.get('basic-dependencies')
         for t in sentence['tokens']:
-            # print t[0]
             if t["word"]:
                 # TODO: specific rules for each corpus
                 #if ""
-                token_seq = self.regex_tokens.split(t["word"])#, flags=re.U)
+                token_seq = self.regex_tokens.split(t["originalText"])#, flags=re.U)
                 #token_seq = rext.split(r'(\w+)(/|\\|\+|\.)(\w+)', t[0])
                 #token_seq = [t[0]]
                 # print t[0], token_seq
-                if len(token_seq) > 3 and t["word"] not in stanford_coding.keys():
+                if len(token_seq) > 3: #and t["word"] not in stanford_coding.keys():
                     # logging.info("{}: {}".format(t["word"], "&".join(token_seq)))
                     for its, ts in enumerate(token_seq):
                         if ts.strip() != "":
@@ -148,7 +147,8 @@ class Sentence(object):
             #print [(ee.start, ee.end) for ee in self.entities.elist[source]]
 
 
-    def tag_entity(self, start, end, etype, entity=None, source="goldstandard", exclude=None, **kwargs):
+    def tag_entity(self, start, end, etype, entity=None, source="goldstandard", exclude=None,
+                   text=None, **kwargs):
         """Find the tokens that match this entity. start and end are relative to the sentence.
            Totalchars is the offset of the sentence on the document."""
         tlist = []
@@ -211,14 +211,16 @@ class Sentence(object):
                 eid = self.sid + ".e" + str(len(self.entities.elist[source]))
             else:
                 eid = self.sid + ".e0"
+            subtype = kwargs.get("subtype", "all")
             if entity is None:
                 if "text" in kwargs:
                     newtext = kwargs["text"]
+                kwargs["eid"] = eid
                 entity = create_entity(tlist, self.sid, did=self.did, text=newtext, score=kwargs.get("score"),
-                                       etype=etype, eid=eid, subtype=kwargs.get("subtype"),
-                                       original_id=kwargs.get("original_id"), nextword=nextword)
+                                       etype=etype, nextword=nextword, **kwargs)
             self.entities.add_entity(entity, source)
-            self.label_tokens(tlist, source, etype)
+            # print self.entities.elist["goldstandard"]
+            self.label_tokens(tlist, source, etype, subtype=subtype)
             #logging.debug("added {} to {}, now with {} entities".format(newtext, self.sid,
             #                                                                 len(self.entities.elist[source])))
             return eid
@@ -227,25 +229,34 @@ class Sentence(object):
             logging.info("{} {} {} {}".format(self.sid, start, end, kwargs.get("text")))
             logging.info(str([(t.start, t.end, t.text) for t in self.tokens]))
 
-    def label_tokens(self, tlist, source, etype):
+    def label_tokens(self, tlist, source, etype, subtype="all"):
         if len(tlist) == 1:
             tlist[0].tags[source] = "single"
             tlist[0].tags[source + "_subtype"] = etype
             tlist[0].tags[source + "_" + etype] = "single"
+            if subtype != "all":
+                #print subtype
+                tlist[0].tags[source + "_" + etype + "-" + subtype] = "single"
         else:
             for t in range(len(tlist)):
                 if t == 0:
                     tlist[t].tags[source] = "start"
                     tlist[t].tags[source + "_" + etype] = "start"
                     tlist[t].tags[source + "_subtype"] = etype
+                    if subtype != "all":
+                        tlist[t].tags[source + "_" + etype + "-" + subtype] = "start"
                 elif t == len(tlist) - 1:
                     tlist[t].tags[source] = "end"
                     tlist[t].tags[source + "_" + etype] = "end"
                     tlist[t].tags[source + "_subtype"] = etype
+                    if subtype != "all":
+                        tlist[t].tags[source + "_" + etype + "-" + subtype] = "end"
                 else:
                     tlist[t].tags[source] = "middle"
                     tlist[t].tags[source + "_" + etype] = "middle"
                     tlist[t].tags[source + "_subtype"] = etype
+                    if subtype != "all":
+                        tlist[t].tags[source + "_" + etype + "-" + subtype] = "middle"
         # logging.debug([t.tags for t in tlist])
 
     def write_bioc_results(self, parent, source):
@@ -334,3 +345,14 @@ class Sentence(object):
                 if self.pairs.pairs[p].recognized_by[r] == 1:
                     p.relation = True
         return tempfiles
+
+    def get_entitites_between(self, entity1, entity2, source):
+        if entity1.start > entity2.start:  # entity1 should always be the first entity
+            entity1, entity2 = entity2, entity1
+        first_between = entity1.end
+        last_between = entity2.start
+        entities = []
+        for entity in self.entities.elist[source]:
+            if entity.start >= first_between and entity.end <= last_between:
+                entities.append(entity)
+        return entities

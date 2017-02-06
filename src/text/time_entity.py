@@ -1,8 +1,13 @@
-from text.entity import Entity
+import sys
 import logging
 import re
+import os
 
-stopwords = set()
+sys.path.append(os.path.abspath(os.path.dirname(__file__) + '..'))
+from timeexpressions import classify_time
+from text.entity import Entity
+
+stopwords = set(["previously", "currently"])
 time_words = set()
 #with open("TermList.txt") as termlist:
 #    for l in termlist:
@@ -16,6 +21,54 @@ class TimeEntity(Entity):
         self.type = "time"
         self.subtype = kwargs.get("subtype")
         self.original_id = kwargs.get("original_id")
+
+    def set_type(self):
+        types = classify_time(self.text, self.before_context, self.after_context)
+        # print "setting time type", types
+        self.subtype = types[1]
+
+    def set_attributes(self, context, sentence_entities):
+        break_words = ["but", "with"]
+        # generate context windows
+
+        firsttoken = self.tokens[0].order
+        lasttoken = self.tokens[-1].order
+
+        lw = 5
+        before_tokens5 = []
+        before_count = 0
+        for i in range(firsttoken-1, -1, -1):
+            if context[i].text in break_words:
+                break
+            before_count += 1
+            #else:
+            #    print "ignored", sentence.tokens[i].text
+            before_tokens5 = [context[i]] + before_tokens5
+            if before_count == lw:
+                #if len(before_tokens5) > lw:
+                #    print len(before_tokens5)
+                break
+        rw = 5
+        after_tokens5 = []
+        after_count = 0
+        for i in range(lasttoken+1,len(context)):
+            if context[i].text in break_words:
+                break
+            #if len(sentence.tokens[i].tags):
+            #    print sentence.tokens[i].tags
+            #if len(sentence.tokens[i].text) > 2 and "goldstandard_event" not in sentence.tokens[i].tags.keys():
+            after_count += 1
+            #else:
+            #    print "ignored", sentence.tokens[i].text
+            after_tokens5 =  after_tokens5 + [context[i]]
+            if after_count == rw:
+                #if len(after_tokens5) > rw:
+                #    print len(after_tokens5)
+                break
+        self.before_context = "+" + "+".join([re.escape(t.text) for t in before_tokens5]) + "+"
+        self.after_context = "+" + "+".join([re.escape(t.text) for t in after_tokens5]) + "+"
+        self.before_events = "".join([str(int("goldstandard_event" in t.tags)) for t in before_tokens5])
+        self.set_type()
 
     def validate(self, ths, rules, *args, **kwargs):
         """

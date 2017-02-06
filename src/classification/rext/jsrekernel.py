@@ -61,11 +61,11 @@ class JSREKernel(ReModel):
             sep = ":"
         libs = ["libsvm-2.8.jar", "log4j-1.2.8.jar", "commons-digester.jar", "commons-beanutils.jar",
                 "commons-logging.jar", "commons-collections.jar"]
-        classpath = 'bin/jsre/jsre-1.1/bin/' + sep + sep.join(["bin/jsre/jsre-1.1/lib/" + l for l in libs])
-        jsrecall = ['java', '-mx8g', '-classpath', classpath, "org.itc.irst.tcc.sre.Train",
-                          "-k",  "SL", "-n", "3", "-w", "4", "-m", "3072",  # "-c", str(2),
+        classpath = 'bin/jsre/jsre-1.1/:bin/jsre/jsre-1.1/bin/' + sep + sep.join(["bin/jsre/jsre-1.1/lib/" + l for l in libs])
+        jsrecall = ['java', '-mx4g', '-classpath', classpath, "org.itc.irst.tcc.sre.Train",
+                          "-k", "SL", "-n", "3", "-w", "4", "-m", "3072",  # "-c", str(2),
                           self.temp_dir + self.modelname + ".txt", self.basedir + self.modelname]
-        # print " ".join(jsrecall)
+        print " ".join(jsrecall)
         jsrecall = Popen(jsrecall, stdout=PIPE, stderr=PIPE)
         res  = jsrecall.communicate()
         if not os.path.isfile(self.basedir + self.modelname):
@@ -88,9 +88,10 @@ class JSREKernel(ReModel):
         res = jsrecall.communicate()
         #logging.debug(res[0].strip().split('\n')[-2:])
         #os.system(' '.join(jsrecommand))
-        if not os.path.isfile(self.temp_dir + outputfile):
+        if not os.path.isfile(self.resultsfile):
             print "something went wrong with JSRE!"
             print res
+            print self.resultsfile
             sys.exit()
         logging.debug("done.")
 
@@ -107,7 +108,7 @@ class JSREKernel(ReModel):
         lemmas = [t.lemma for t in tokens]
         ner = [t.tag for t in tokens]
         #logging.debug("{} {} {} {}".format(len(tokens1), len(pos), len(lemmas), len(ner)))
-        return self.blind_all_entities(tokens_text, sentence.entities.elist["goldstandard"],
+        return self.blind_all_entities(tokens_text, sentence.entities.elist[self.ner_model],
                                        [e1id, e2id], pos, lemmas, ner)
 
     def generatejSREdata(self, corpus, train=False, pairtype="all"):
@@ -133,7 +134,7 @@ class JSREKernel(ReModel):
             sids = []
             # print len(corpus.type_sentences[pairtype])
             sentence_entities = [entity for entity in sentence.entities.elist[self.ner_model]]
-            print sentence.sid, self.ner_model, len(sentence.entities.elist[self.ner_model]), sentence_entities
+            # print sentence.sid, self.ner_model, len(sentence.entities.elist[self.ner_model]), sentence_entities
             # logging.debug("sentence {} has {} entities ({})".format(sentence.sid, len(sentence_entities), len(sentence.entities.elist["goldstandard"])))
             for pair in itertools.permutations(sentence_entities, 2):
                 # print pair[0].type, pair[1].type, pairtypes
@@ -144,6 +145,7 @@ class JSREKernel(ReModel):
                 sids.append((pair[0].sid, pair[0].sid))
                 sn1 = int(sid1[1:])
                 sn2 = int(sid2[1:])
+
                 if pair[0].start == pair[1].start or pair[0].end == pair[1].end:
                     continue
                 if pairtype in ("Has_Sequence_Identical_To", "Is_Functionally_Equivalent_To") and pair[0].type != pair[1].type:
@@ -151,6 +153,10 @@ class JSREKernel(ReModel):
                 if pair[0].type in pairtypes[0] and pair[1].type in pairtypes[1]: # or\
                    # pair[1].type in pairtypes[0] and pair[0].type in pairtypes[1]:
                     # logging.debug(pair)
+                    entities_between = sentence.get_entitites_between(pair[0], pair[1], self.ner_model)
+                    if len(entities_between) > 1:
+                        print entities_between
+                        continue
                     """if pair[0].type == pairtypes[0]:
 
                     else:
@@ -256,7 +262,7 @@ class JSREKernel(ReModel):
             #    print pairs[pair][ddi.PAIR_TOKENS][it][0].lstrip()
             #    sys.exit()
 
-            elements.append("&&".join([str(it), tokentext,
+            elements.append("&&".join([str(it), tokentext.strip(),
                               lemma,
                               pos[it],
                               tokentype, tokenlabel]))

@@ -10,9 +10,10 @@ from sklearn.externals import joblib
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 
-from config.corpus_paths import paths
+
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + '../..'))
+from config.corpus_paths import paths
 from text.corpus import Corpus
 from config import config
 from text.offset import Offset, perfect_overlap, contained_by, Offsets
@@ -23,11 +24,12 @@ END_TAG = "end"
 MIDDLE_TAG = "middle"
 OTHER_TAG = "other"
 
-class ResultsRE(object):
-    def __init__(self, name):
-        self.pairs = {}
-        self.name = name
+class SystemResults(object):
+
+    def __init__(self):
+        self.name = None
         self.corpus = None
+        self.basedir = None
         self.document_pairs = {}
 
     def save(self, path):
@@ -58,9 +60,12 @@ class ResultsRE(object):
 
         self.corpus = corpus
 
-class ResultsNER(object):
+
+
+class ResultsNER(SystemResults):
     """Store a set of entities related to a corpus or input text """
     def __init__(self, name):
+        super(ResultsNER, self).__init__()
         self.entities = {}
         self.name = name
         self.corpus = Corpus(self.name)
@@ -93,32 +98,8 @@ class ResultsNER(object):
                 sentence.entities.elist[self.name] = new_entities
         self.corpus = corpus
 
-    def save(self, path):
-        # no need to save the whole corpus, only the entities of each sentence are necessary
-        # because the full corpus is already saved on a diferent pickle
-        logging.info("Saving results to {}".format(path))
-        reduced_corpus = {}
-        for did in self.corpus.documents:
-            reduced_corpus[did] = {}
-            for sentence in self.corpus.documents[did].sentences:
-                reduced_corpus[did][sentence.sid] = sentence.entities
-        self.corpus = reduced_corpus
-        pickle.dump(self, open(path, "wb"))
-    
     def save_chemdner(self):
         pass
-
-    def load_corpus(self, goldstd):
-        logging.info("loading corpus %s" % paths[goldstd]["corpus"])
-        corpus = pickle.load(open(paths[goldstd]["corpus"]))
-
-        for did in corpus.documents:
-            for sentence in corpus.documents[did].sentences:
-                sentence.entities = self.corpus[did][sentence.sid]
-                #for entity in sentence.entities.elist[options.models]:
-                #    print entity.chebi_score,
-
-        self.corpus = corpus
 
     def combine_results(self, basemodel, name):
         # add another set of anotations to each sentence, ending in combined
@@ -238,6 +219,29 @@ class ResultsNER(object):
         #     print train_data[i], l
         return train_data, train_labels, offsets
 
+class ResultsRE(SystemResults):
+    def __init__(self, name):
+        super(ResultsRE, self).__init__()
+        self.pairs = {}
+        self.name = name
+        self.corpus = None
+        self.document_pairs = {}
+
+    def save(self, path):
+        # no need to save the whole corpus, only the entities of each sentence are necessary
+        # because the full corpus is already saved on a diferent pickle
+        logging.info("Saving results to {}".format(path))
+        reduced_corpus = {}
+        npairs = 0
+        for did in self.corpus.documents:
+            self.document_pairs[did] = self.corpus.documents[did].pairs
+            npairs += len(self.document_pairs[did].pairs)
+            reduced_corpus[did] = {}
+            for sentence in self.corpus.documents[did].sentences:
+                reduced_corpus[did][sentence.sid] = sentence.entities
+        self.corpus = reduced_corpus
+        pickle.dump(self, open(path, "wb"))
+
 
 class ResultSetNER(object):
     """
@@ -289,6 +293,33 @@ def combine_results(modelname, results, resultsname, etype, models):
                                         ref_sentence.entities.elist[modelname].append(e)
     return all_results
 
+def combine_results_reduced_corpus(modelname, results, resultsname, etype, models):
+    all_results = ResultsNER(resultsname)
+    all_results.corpus = results[0].corpus
+    for r in results:
+        print r.path
+        for did in r.corpus:
+            all_results.document_pairs[did] = []
+            for sid in r.corpus[did]:
+                if modelname not in all_results.corpus[did][sid].elist:
+                        all_results.corpus[did][sid].elist[modelname] = []
+                offsets = Offsets()
+                sentence_entities = r.corpus[did][sid]
+                for s in sentence_entities.elist:
+                    # print s
+                    if s in models:
+                        for e in sentence_entities.elist[s]:
+                                if e.type == etype:
+                                    eid_offset = Offset(e.dstart, e.dend, text=e.text, sid=e.sid)
+                                    exclude = [perfect_overlap]
+                                    toadd, v, overlapping, to_exclude = offsets.add_offset(eid_offset, exclude_this_if=exclude, exclude_others_if=[])
+                                    if toadd:
+                                        # print "added:", r.path, s, e.text
+                                        all_results.corpus[did][sid].elist[modelname].append(e)
+    return all_results
+
+
+
 def main():
     start_time = time.time()
     parser = argparse.ArgumentParser(description='')
@@ -327,7 +358,7 @@ def main():
         if os.path.exists(r + ".pickle"):
             results = pickle.load(open(r + ".pickle", 'rb'))
             results.path = r
-            results.load_corpus(options.goldstd)
+            #results.load_corpus(options.goldstd)
             results_list.append(results)
         else:
             print "results not found"
@@ -338,8 +369,9 @@ def main():
         logging.info("combining results...")
         #new_name = "_".join([m.split("/")[-1] for m in options.results])
         #print new_name
-        results = combine_results(options.finalmodel, results_list, options.output, options.etype, options.models)
-        results.save(options.output + ".pickle")
+        results = combine_results_reduced_corpus(options.finalmodel, results_list, options.output, options.etype, options.models)
+        #results.save(options.output + ".pickle")
+        pickle.dump(results, open(options.output + ".pickle", "wb"))
 
     """elif options.action in ("train_ensemble", "test_ensemble"):
         if "annotations" in config.paths[options.goldstd]:

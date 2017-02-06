@@ -26,6 +26,7 @@ class Corpus(object):
         self.documents = kwargs.get("documents", {})
         self.invalid_sections = set()
         self.invalid_sids = set()
+        self.name = kwargs.get("corpusname", "default_name")
         #logging.debug("Created corpus with {} documents".format(len(self.documents)))
 
     def progress(self, count, total, suffix=''):

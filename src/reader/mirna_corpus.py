@@ -43,7 +43,7 @@ class MirnaCorpus(Corpus):
             t = time.time()
             root = ET.fromstring(xml.read())
             all_docs = root.findall("document")
-            widgets = [pb.Percentage(), ' ', pb.Bar(), ' ', pb.AdaptiveETA(), ' ', pb.Timer()]
+            widgets = [pb.Percentage(), ' ', pb.Bar(), ' ', pb.ETA(), ' ', pb.Timer()]
             pbar = pb.ProgressBar(widgets=widgets, maxval=len(all_docs)).start()
             for i, doc in enumerate(all_docs):
                 doctext = ""

@@ -1,9 +1,11 @@
 import logging
 import re
 
-from postprocessing.chebi_resolution import find_chebi_term3
 from text.entity import Entity
 from config import config
+
+if config.use_chebi:
+    from postprocessing.chebi_resolution import find_chebi_term3
 
 element_base = {
     # number: name symbol ions

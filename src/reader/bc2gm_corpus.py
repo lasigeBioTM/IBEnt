@@ -23,7 +23,7 @@ class BC2GMCorpus(Corpus):
 
     def load_corpus(self, corenlpserver, process=True):
         total_lines = sum(1 for line in open(self.path))
-        widgets = [pb.Percentage(), ' ', pb.Bar(), ' ', pb.AdaptiveETA(), ' ', pb.Timer()]
+        widgets = [pb.Percentage(), ' ', pb.Bar(), ' ', pb.ETA(), ' ', pb.Timer()]
         pbar = pb.ProgressBar(widgets=widgets, maxval=total_lines, redirect_stdout=True).start()
         time_per_abs = []
         with codecs.open(self.path, 'r', "utf-8") as trainfile:

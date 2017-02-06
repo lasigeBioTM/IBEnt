@@ -4,7 +4,7 @@ import re
 import os
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + '..'))
-from timeexpressions import classify_time
+from classification.attributeclassifier import classify_time
 from text.entity import Entity
 
 stopwords = set(["previously", "currently"])

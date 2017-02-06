@@ -1,19 +1,14 @@
-import logging
-import re
-import os
-import sys
 import atexit
-import time
-from text.entity import Entity
-from config import config
-from subprocess import Popen, PIPE
 import cPickle as pickle
-from EAtype import classify_type
-from event_polarity import classify_polarity
-from event_modality import classify_modality
-from Script_EA_Degree import classify_degree
-from event_dtr import classify_doctimerel
-
+import logging
+import os
+import re
+import sys
+import time
+from config import config
+from classification.attributeclassifier import classify_polarity, classify_degree, classify_type, classify_doctimerel, classify_modality
+from subprocess import Popen, PIPE
+from text.entity import Entity
 
 stopwords = set(["medication", "smear", "brain", "instructions", "tablets", "indication"])
 

@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 import logging
 import socket
 import sys
@@ -40,21 +39,21 @@ class Sentence(object):
         pass
 
     def process_sentence(self, corenlpserver, doctype="biomedical"):
-        corenlpres = corenlpserver.annotate(self.text.encode("utf8"), properties={
-            'ssplit.eolonly': True,
-            'annotators': 'tokenize,ssplit,pos,ner,lemma',
-            #'annotators': 'tokenize,ssplit,pos,parse,ner,lemma,depparse',
-            'outputFormat': 'json',
+        corenlpres = corenlpserver.annotate(str(self.text), properties={
+            #'ssplit.eolonly': True,
+            #'annotators': 'tokenize,ssplit,pos,ner,lemma',
+            'annotators': 'tokenize,ssplit,pos,ner,lemma,depparse',
+            'outputFormat': 'json'
         })
-        if isinstance(corenlpres, basestring):
+        if isinstance(corenlpres, basestring) or not corenlpres:
             print corenlpres
             corenlpres = corenlpserver.annotate(self.text.encode("utf8"), properties={
-                'ssplit.eolonly': True,
+                # 'ssplit.eolonly': True,
                 # 'annotators': 'tokenize,ssplit,pos,depparse,parse',
                 'annotators': 'tokenize,ssplit,pos,lemma',
-                'outputFormat': 'json',
+                'outputFormat': 'json'
             })
-        if isinstance(corenlpres, basestring):
+        if isinstance(corenlpres, basestring) or not corenlpres:
             print "could not process this sentence:", self.text.encode("utf8")
             print corenlpres
         else:

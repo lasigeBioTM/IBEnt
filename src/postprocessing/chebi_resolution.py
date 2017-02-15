@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from __future__ import division, unicode_literals
+from __future__ import division
 import MySQLdb
 import re
 import sys

@@ -1,5 +1,5 @@
 # coding=utf-8
-from __future__ import division, unicode_literals
+from __future__ import division
 import sys
 import requests
 from timeit import default_timer as timer
@@ -37,11 +37,11 @@ def main():
 
     #r = requests.post('http://10.10.4.63:8080/iice/chemical/entities', json=data)
 
-    # print bcolors.OKBLUE + "Submit new document" + bcolors.ENDC
-    # start = timer()
-    # r = requests.post('http://10.10.4.63:8080/ibent/DOC{}'.format(sys.argv[1]), json=data)
-    # print r.url, ":", timer() - start
-    # pp.pprint(r.json())
+    print bcolors.OKBLUE + "Submit new document" + bcolors.ENDC
+    start = timer()
+    r = requests.post('http://10.10.4.63:8080/ibent/DOC{}'.format(sys.argv[1]), json=data)
+    print r.url, ":", timer() - start
+    pp.pprint(r.json())
 
     # print bcolors.OKBLUE + "Fetch document" + bcolors.ENDC
     # start = timer()
@@ -87,11 +87,11 @@ def main():
     # pp.pprint(r.json())
     # print r.text
 
-    print bcolors.OKBLUE + "Get miRNA-gene relations" + bcolors.ENDC
-    start = timer()
-    r = requests.post('http://10.10.4.63:8080/ibent/relations/DOC{}/mil_classifier4k'.format(sys.argv[1]))
-    print r.url, ":", timer() - start
-    pp.pprint(r.json())
+    #print bcolors.OKBLUE + "Get miRNA-gene relations" + bcolors.ENDC
+    #start = timer()
+    #r = requests.post('http://10.10.4.63:8080/ibent/relations/DOC{}/mil_classifier4k'.format(sys.argv[1]))
+    #print r.url, ":", timer() - start
+    #pp.pprint(r.json())
     #print r.text
 
     print "Total time:", timer() - start_total

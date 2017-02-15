@@ -87,8 +87,12 @@ class PubmedDocument(Document):
         tables = root.findall('.//table-wrap')
         figures = root.findall('.//fig')
         for t in tables:
-            caption = ''.join(ET.tostring(e) for e in t.find("caption"))
-            content = ''.join(ET.tostring(e) for e in t.find("table"))
+            caption = ""
+            if t.find("caption"):
+                caption = ''.join(ET.tostring(e) for e in t.find("caption"))
+            content = ""
+            if t.find("content"):
+                content = ''.join(ET.tostring(e) for e in t.find("table"))
             table = {"caption": caption, "content": content}
             self.tables.append(table)
         for f in figures:

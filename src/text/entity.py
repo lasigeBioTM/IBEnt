@@ -1,4 +1,4 @@
-from __future__ import division, absolute_import, unicode_literals
+from __future__ import division, absolute_import
 
 import xml.etree.ElementTree as ET
 import logging

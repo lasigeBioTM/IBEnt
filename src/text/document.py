@@ -40,6 +40,7 @@ class Document(object):
         self.title = kwargs.get("title")
         self.sentences = kwargs.get("sentences", [])
         self.did = kwargs.get("did", "d0")
+        self.corpus = kwargs.get("corpus", "ibent")
         self.invalid_sids = []
         self.title_sids = []
         self.source = kwargs.get("source")
@@ -59,7 +60,7 @@ class Document(object):
         #    sid = self.did + ".s0"
         #    self.sentences.append(Sentence(self.title, sid=sid, did=self.did))
         # inputtext = clean_whitespace(self.text)
-        inputtext = self.text
+        inputtext = unicode(self.text)
         with io.open("/tmp/geniainput.txt", 'w', encoding='utf-8') as geniainput:
             geniainput.write(inputtext)
         current_dir = os.getcwd()
@@ -90,11 +91,12 @@ class Document(object):
             # use specific sentence splitter
             self.sentence_tokenize(doctype)
         for s in self.sentences:
+            # attempt two times
             #corenlpres = corenlpserver.raw_parse(s.text)
             corenlpres = corenlpserver.annotate(s.text.encode("utf8"), properties={
                 'ssplit.eolonly': True,
                 #'annotators': 'tokenize,ssplit,pos,ner,lemma',
-                'annotators': 'tokenize,ssplit,pos,parse,ner,lemma,depparse',
+                'annotators': 'tokenize,ssplit,pos,ner,lemma,depparse',
                 'outputFormat': 'json',
             })
             if isinstance(corenlpres, basestring):
@@ -110,6 +112,7 @@ class Document(object):
                 print corenlpres
                 continue
             else:
+                s.corenlpres = str(corenlpres)
                 s.process_corenlp_output(corenlpres)
 
 

@@ -35,7 +35,7 @@ from postprocessing.ssm import add_ssm_score
 
 
 
-class IBENT(object):
+class IBENTServer(object):
 
     def __init__(self, entities, relations):
         self.baseport = 9181
@@ -442,11 +442,11 @@ def main():
     logging.getLogger().setLevel(numeric_level)
 
     logging.debug("Initializing the server...")
-    server = IBENT(entities=[("mirtex_train_mirna_sner", "stanfordner", "mirna"),
-                             ("chemdner_train_all", "stanfordner", "chemical"),
-                             ("banner", "banner", "gene"),
-                             ("genia_sample_gene", "stanfordner", "gene")],
-                   relations=[("all_ddi_train_slk", "jsre", "ddi"),
+    server = IBENTServer(entities=[("mirtex_train_mirna_sner", "stanfordner", "mirna"),
+                                   ("chemdner_train_all", "stanfordner", "chemical"),
+                                   ("banner", "banner", "gene"),
+                                   ("genia_sample_gene", "stanfordner", "gene")],
+                         relations=[("all_ddi_train_slk", "jsre", "ddi"),
                               ("mil_classifier4k", "smil", "mirna-gene")])
     logging.debug("done.")
     # Test server

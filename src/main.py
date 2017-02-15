@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from __future__ import division, unicode_literals
+from __future__ import division
 
 import argparse
 import cPickle as pickle
@@ -46,6 +46,7 @@ from reader.pubmed_corpus import PubmedCorpus
 from reader.tempEval_corpus import TempEvalCorpus
 from reader.Transmir_corpus import TransmirCorpus
 from text.corpus import Corpus
+from ibent_database import IBENTDatabase
 
 if config.use_chebi:
     pass
@@ -113,7 +114,7 @@ def main():
                       choices=["load_corpus", "annotate", "classify", "write_results", "write_goldstandard",
                                "train", "test", "train_multiple", "test_multiple", "train_matcher", "test_matcher",
                                "crossvalidation", "train_relations", "test_relations", "load_genia", "load_biomodel",
-                               "merge_corpus", "tuples"])
+                               "merge_corpus", "tuples", "load_to_db"])
     parser.add_argument("--goldstd", default="", dest="goldstd", nargs="+",
                         help="Gold standard to be used. Will override corpus, annotations",
                         choices=paths.keys())
@@ -152,7 +153,7 @@ considered when coadministering with megestrol acetate.''',
     logging.getLogger().setLevel(numeric_level)
     logging.getLogger("requests.packages").setLevel(30)
     logging.info("Processing action {0} on {1}".format(options.actions, options.goldstd))
-
+    ibentdb = IBENTDatabase()
     # set configuration variables based on the goldstd option if the corpus has a gold standard,
     # or on corpus and annotation options
     # pre-processing options
@@ -167,8 +168,11 @@ considered when coadministering with megestrol acetate.''',
 
         corenlp_client = StanfordCoreNLP('http://localhost:9000')
         corpus = load_corpus(options.goldstd, corpus_path, corpus_format, corenlp_client)
+        corpus.tag = options.goldstd
         #corpus.load_genia() #TODO optional genia
-        corpus.save(paths[options.goldstd]["corpus"])
+        #corpus.save(paths[options.goldstd]["corpus"])
+        #corpus.save_to_db(paths[options.goldstd]["corpus"])
+        ibentdb.add_corpus(corpus)
         if corpus_ann: #add annotation if it is not a test set
             corpus.load_annotations(corpus_ann, options.etype, options.ptype)
             corpus.save(paths[options.goldstd]["corpus"])

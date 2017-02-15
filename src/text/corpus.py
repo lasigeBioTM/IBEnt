@@ -10,7 +10,9 @@ import os
 from subprocess import PIPE, check_output
 from subprocess import Popen
 import pexpect
+import MySQLdb
 
+from config import config
 from postprocessing import ssm
 from bllipparser import RerankingParser
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + '../..'))
@@ -26,6 +28,8 @@ class Corpus(object):
         self.documents = kwargs.get("documents", {})
         self.invalid_sections = set()
         self.invalid_sids = set()
+        self.version = kwargs.get("version", "1")
+        self.description = kwargs.get("description", "")
         #logging.debug("Created corpus with {} documents".format(len(self.documents)))
 
     def progress(self, count, total, suffix=''):
@@ -45,6 +49,11 @@ class Corpus(object):
         #    path = args[0]
         pickle.dump(self, open(savedir, "wb"))
         logging.info("saved corpus to " + savedir)
+
+    def save_to_db(self, savename):
+        pass
+
+
 
     def to_tuple(self):
         for did in self.documents:

@@ -4,7 +4,7 @@ WORKDIR /
 COPY bin/ bin/
 # RUN apt-get install -y python2.7
 
-# Install Java.
+# Install Java
 RUN \
   echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | debconf-set-selections && \
   apt-get update && apt-get install software-properties-common -y && \
@@ -17,7 +17,7 @@ RUN \
 # Define commonly used JAVA_HOME variable
 ENV JAVA_HOME /usr/lib/jvm/java-8-oracle
 
-RUN apt-get update && apt-get install unzip && apt-get install netstat
+RUN apt-get update && apt-get install unzip && apt-get install net-tools
 WORKDIR /bin
 
 # Get Stanford NER 3.5.2
@@ -42,7 +42,7 @@ WORKDIR /bin/geniass
 RUN apt-get update -y && apt-get install -y build-essential g++ make && make
 
 WORKDIR bin/
-RUN wget http://dl.dropbox.com/u/9060632/jsre-1.1.tgz && tar -xvzf jsre-1.1.tgz
+RUN wget https://files.pythonhosted.org/packages/db/ee/087a1b7c381041403105e87d13d729d160fa7d6010a8851ba051b00f7c67/jsre-1.1.0.zip && unzip jsre-1.1.0.zip
 WORKDIR jsre
 
 # Download sample data
